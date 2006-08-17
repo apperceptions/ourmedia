@@ -1,0 +1,869 @@
+<?php
+// $Id
+
+/*              PayPal Module
+ *
+ *    By Kevin Landreth (CrackerJackMack)
+ *
+ *    This modules purpose isn't to replace the Ecommerce module
+ *    but to offer an extention to Drupal. 
+ *
+ *    I would like to thank the authors of the PHP Toolkit 0.50
+ *    you can visit their project here at http://paypal.sourceforge.net/
+ *
+ *    Some of the code contained in the module is from this toolkit.
+ *    I tried my best to comment the code taken from the toolkit
+ *    in my code, and I am sorry if I missed any sections.
+ */
+
+/*
+ *    I tried to clean up the code syntax, clarify some help text, and
+ *    fortify the SQL statements. I also rearranged the menu hook a bit.
+ *    Beyond that, I introduced the 'paypal_transaction' hook so modules
+ *    may act immediately upon transaction activity. 
+ *
+ *    While writing paypal_tipjar.module and paypal_subscription.module,
+ *    paypal_framework.module has been very helpful.  Thanks, Kevin!
+ *
+ *    ~ Nic Ivy (njivy)
+ */
+
+
+function paypal_framework_help($section) {
+
+  switch ($section) {
+    case 'admin/modules#description': 
+      $output = t('Allow use of the PayPal Developer Network tools such as IPN');
+      break;
+    case 'admin/settings/paypal_framework#title':
+    case 'admin/help#paypal_framework':
+      $output = t('PayPal framework');
+      break;
+    case 'admin/system/modules/paypal_framework':
+    case 'admin/settings/paypal_framework':
+      $output = t('Giving credit where credit is due is very important. The developers of this module would like to thank the PayPal Developer Network for providing useful PHP code that made this module possible. %pdn  Please view the changelog AND todo files to see if the paypal method you are looking for is supported', array('%pdn' => l(t('PHP project for PDN.'), 'http://paypal.sourceforge.net/')) );
+      break;
+  }
+
+  return $output;
+
+}
+
+function paypal_framework_perm() {
+
+    return array('administer paypal framework');
+
+}
+
+function paypal_framework_menu($may_cache) {
+  $menu = array();
+
+  if ($may_cache) {
+    $menu[] = array('path' => 'admin/paypal',
+                    'title' => t('PayPal'),
+                    'access' => user_access('administer paypal framework'),
+                    'callback' => '_paypal_page_stats');
+    $menu[] = array('path' => 'paypal/ipn',
+                    'title' => t('IPN post'),
+                    'type' => MENU_CALLBACK,
+                    'access' => true,
+                    'callback' => '_paypal_ipn_receive');
+  }
+  else {
+    // These paths depend on the URL, so we cannot cache them.
+    if (arg(0) == 'admin' && arg(1) == 'paypal') {
+      if (arg(2) == 'payer' && arg(3)) {
+        $menu[] = array('path' => 'admin/paypal/payer/'.arg(3),
+                        'title' => t('Payer stats'),
+                        'access' => user_access('administer paypal framework'),
+                        'callback' => '_paypal_payer_stats',
+                        'type' => MENU_CALLBACK);
+      }
+      elseif (arg(2) == 'item' && arg(3)) {
+        $menu[] = array('path' => 'admin/paypal/item/'.arg(3),
+                        'title' => t('Item stats'),
+                        'access' => user_access('administer paypal framework'),
+                        'callback' => '_paypal_item_stats',
+                        'type' => MENU_CALLBACK);
+      }
+      elseif (arg(2) == 'transaction' && arg(3)) {
+        $menu[] = array('path' => 'admin/paypal/transaction/'.arg(3),
+                        'title' => t('Transaction information'),
+                        'access' => user_access('administer paypal framework'),
+                        'callback' => '_paypal_txn_stats',
+                        'type' => MENU_CALLBACK);
+      }
+    }
+  }
+
+  return $menu;
+
+}
+
+function paypal_framework_cron() {
+
+  /*
+   * Have our own function for it, gives us room to
+   * expand if we scale to more queues and whatnot.
+   */
+  _paypal_process_queue();
+
+}
+
+function paypal_framework_settings()  {
+  global $db_type;
+
+  $output = '';
+
+  /* START Basic Paypal Settings */
+  $output = form_textarea( t('PayPal email'), 'paypal_emails', variable_get('paypal_emails', ''), 32, 4, t('Please enter on separate lines the PayPal email addresses whose transaction activities this module will record.'));
+
+  // I removed the paypal_maxentries form element because nothing used
+  // that variable. As a bonus, we have less UI clutter.
+  /* END Basic Paypal Settings */
+
+
+
+  /* START IPN Verification Form */
+  $form = form_select(t('IPN reply method'), 'paypal_postmethod', variable_get('paypal_postmethod', 'fsock'), array('fsock' => 'PHP fsock', 'libCurl' => 'PHP LibCurl', 'curl' => 'Curl Binary'), t('This is the method with which Drupal will attempt to reply back to the PayPal server, verifying that the transaction data is valid.  Please note that <em>libCurl</em> must be compiled into PHP but <em>Curl binary</em> implies access to the operating system\'s curl binary, usually in /usr/bin/ on unix-like systems.  If  your server was compiled with --enable-sockets then you can probably use <em>fsockopen</em> properly.  If in doubt, please contact your system administrator.'));
+  $form .=  form_textfield(t('Curl binary'), 'paypal_curl', variable_get('paypal_curl', ''), 10, 100, t("If you are using the <em>Curl binary</em>, enter the path to curl. E.g. /usr/bin/curl."));
+  $form .=  form_textfield(t('Reply POST address'), 'paypal_post', variable_get('paypal_post', 'https://www.paypal.com/cgi-bin/webscr'), 45, 100, t('You can get this address from the <em>technical overview</em> section for the <em>instant payment notification</em> system on %site', array('%site' => l('paypal.com', 'http://www.paypal.com/')) ));
+  $output .=  form_group(t('PayPal instant payment notification (IPN) settings'), $form);
+  unset($form);
+  /* END IPN Verification Form */
+
+
+  /* START Tweaks Configuration */
+  $form = form_checkbox(t('Enable verification queueing'), 'paypal_ver_queue', 1, variable_get('paypal_ver_queue', 0), t('Instead of verifying transactions right away, this method will save everything to the database and then verify the transactions when cron runs.'));
+  $form .= form_textfield(t('Verifications per hour'), 'paypal_ver_limit', variable_get('paypal_ver_limit', 5), 3, 5, t('If you enabled <em>verification queueing</em>, then specify the average number of transactions to verify per hour. For example, if you enter 3 and 6 hours elapse between cron updates, this module will verify <em>up to</em> 18 transactions when cron updates.  Any remaining transactions will be kept in the queue until the next cron update.')); //drupal_cron_last
+  $form .= form_textfield(t('Verifications limit'), 'paypal_ver_max', variable_get('paypal_ver_max', 20), 3, 5, t("If you enabled <em>verification queueing</em>, then specify the maximum number of transactions to verify in any given hour. The smaller of this value and <em>verifications per hour</em> x <em>hours between cron updates</em> will determine how many transactions are processed at once.  This value is useful when cron has not been run in a long time.  Set to 0 to disable.")); 
+  if ($db_type == 'mysql') {
+    $form .= form_checkbox(t('Delayed commits'), 'paypal_mysql_delayed', 1, variable_get('paypal_mysql_delayed', 0), t('If you receive a fairly high volume of payments or have a slow database server, then it is recommended that you check this box.  This option will use delayed database inserts to reduce the instantaneous load on your server.  Since the database table for logging PayPal transactions can be large, checking this box is a good idea for a slower database servers or sites with a large volume of payments. %ref', array('%ref'=>l(t('Click here for more information about delayed inserts.'), 'http://dev.mysql.com/doc/mysql/en/INSERT_DELAYED.html', array('target' => '_new')))));
+  }
+  $output .=  form_group(t('Performance tweaks'), $form);
+  unset($form);
+  /* END Tweaks Configuration */
+
+            
+  return $output;
+
+}    
+
+
+
+
+
+/**********************************************************************************/
+
+function _paypal_txn_stats($txn_id = NULL) {
+  
+  if (!$txn_id) {
+    $txn_id = arg(3);
+  }
+
+  $txn = db_fetch_array(db_query('SELECT ppl.*, UNIX_TIMESTAMP(ppl.transaction_date) AS txn_date, ppp.* FROM {paypal_log} ppl INNER JOIN {paypal_payer} ppp ON ppl.payer_id=ppp.payer_id WHERE txn_id="%s"', $txn_id));
+
+  if (!$txn['txn_id']) {
+    // We have no data.
+    drupal_set_message('Invalid transaction ID: '.$txn_id, 'error');
+    drupal_goto('admin/paypal');
+    return;
+  }
+
+
+  if ($txn['parent_txn_id']) {
+    // Prepare to show a list of related transactions.
+    $result = db_query('SELECT ppl.txn_id, UNIX_TIMESTAMP(ppl.transaction_date) AS transaction_date, ppl.payment_status FROM {paypal_log} ppl WHERE (ppl.txn_id="%s" OR ppl.parent_txn_id="%s") AND ppl.txn_id!="%s" ORDER BY transaction_date', $txn['parent_txn_id'], $txn['parent_txn_id'], $txn['txn_id']);
+
+    $related_headers = array(t('Transaction ID'), t('Status'), t('Transaction date'));
+    while ($related_txn = db_fetch_object($result)) {
+      $related_rows[] = array(l($related_txn->txn_id, 'admin/paypal/transaction/'.$related_txn->txn_id),
+                              $related_txn->payment_status,
+                              format_date($related_txn->transaction_date));
+    }
+  }
+  else {
+    // Look for child transactions.
+    $result = db_query('SELECT ppl.txn_id, UNIX_TIMESTAMP(ppl.transaction_date) AS transaction_date, ppl.payment_status FROM {paypal_log} ppl WHERE ppl.parent_txn_id="%s" ORDER BY transaction_date', $txn['txn_id']);
+
+    $related_headers = array(t('Transaction ID'), t('Status'), t('Transaction date'));
+    while ($sub_transaction = db_fetch_object($result)) {
+      $related_rows[] = array(l($sub_transaction->txn_id, 'admin/paypal/transaction/'.$sub_transaction->txn_id),
+                              $sub_transaction->payment_status,
+                              format_date($sub_transaction->transaction_date));
+    }
+  }
+
+
+  // Prepare certain fields
+  $txn['transaction_date'] = format_date($txn['txn_date'], 'large');
+  unset($txn['txn_date']);
+  $txn['payer_id'] = l($txn['payer_id'], 'admin/paypal/payer/'.$txn['payer_id']);
+  $txn['item_name'] = l($txn['item_name'], 'admin/paypal/item/'.$txn['item_number']);
+  $txn['item_number'] = l($txn['item_number'], 'admin/paypal/item/'.$txn['item_number']);
+  $txn['parent_txn_id'] = l($txn['parent_txn_id'], 'admin/paypal/transaction/'.$txn['parent_txn_id']);
+
+  ksort($txn);
+
+  $headers = array(t('Attribute'), t('Value'));
+  foreach ($txn AS $key => $value) {
+    $rows[] = array($key, $value);
+  }
+
+  $output .= theme('table', $headers, $rows);
+
+  if ($related_rows) {
+    $output .= '<br />';
+    $output .= theme('box', t('Related transactions'), theme('table', $related_headers, $related_rows));
+  }
+
+  drupal_set_title($title);
+  print theme('page', $output);
+}
+
+
+function _paypal_item_stats($item_id = NULL) {
+
+  if (!$item_id) {
+    $item_id = arg(3);
+  }
+
+  if (db_num_rows(db_query("SELECT payer_id FROM {paypal_log} WHERE item_number='%s'", $item_id)) < 1) {
+    drupal_set_message(t('Invalid item ID: '.$item_id), 'error');
+    drupal_goto('admin/paypal');
+    return;
+  }
+
+  // These are the only currencies that PayPal supports.
+  $currencies = array('USD' => 'US$', 'CAD' => 'CA$', 'GBP' => '&pound;', 'EUR' => '&euro;', 'YEN' => '&yen;');
+
+  $result = db_query('SELECT SUM(mc_gross) AS gross, SUM(mc_fee) AS fee, mc_currency AS currency FROM {paypal_log} WHERE item_number="%s" GROUP BY mc_currency', $item_id);
+  
+  while ($totals = db_fetch_object($result)) {
+    $output['gross'][] = round($totals->gross, 2).' '.$currencies[$totals->currency];
+    $output['fees'][] = round($totals->fee, 2).' '.$currencies[$totals->currency];
+    $output['net'][] = round(($totals->gross - $totals->fee), 2).' '.$currencies[$totals->currency];
+  }
+  $output['gross'] = t('Gross received: %gross', array('%gross' => implode(', ', $output['gross'])));
+  $output['fees'] = t('PayPal fees: %fees', array('%fees' => implode(', ', $output['fees'])));
+  $output['net'] = t('Net received: %net', array('%net' => implode(', ', $output['net'])));
+
+  $output = theme('box', t('Totals'), implode('<br />', $output));
+
+  $header = array(array('data' => t('Username'), 'field' => 'u.name'),
+                  array('data' => t('Real name'), 'field' => 'last_name'),
+                  array('data' => t('Email address'), 'field' => 'payer_email'),
+                  array('data' => t('Gross'), 'field' => 'mc_gross'),
+                  array('data' => t('Transaction date'), 'field' => 'transaction_date', 'sort' => 'desc'),
+                  array('data' => t('Status'), 'field' => 'ppl.payment_status')
+                 );
+
+  $result = pager_query('SELECT u.uid, u.name as username, ppl.payer_email AS email_address,
+                          concat(ppp.first_name, " ", ppp.last_name) as realname, ppp.payer_id,
+                          ppl.mc_gross AS gross, ppl.item_name, ppl.txn_id,
+                          UNIX_TIMESTAMP(ppl.transaction_date) AS transaction_date, ppl.payment_status,
+                          ppl.mc_currency AS currency
+                        FROM {paypal_log} ppl
+                          LEFT JOIN {users} u ON ppl.payer_email=u.mail
+                          LEFT JOIN {paypal_payer} ppp ON ppl.payer_id=ppp.payer_id
+                        WHERE item_number="%s"
+                        %s',
+                        50, 0, NULL, $item_id, tablesort_sql($header));
+
+  while ($txn = db_fetch_object($result)) {
+    $item_name = $txn->item_name;
+    $currency = $currencies[$txn->currency];
+    $view_stats = ($txn->payer_id ? l(t('view user stats'), 'admin/paypal/payer/'.$txn->payer_id) : '');
+
+    $rows[] = array(l($txn->username, 'user/'.$txn->uid), 
+                    l($txn->realname, 'admin/paypal/payer/'.$txn->payer_id), 
+                    $txn->email_address, 
+                    $txn->gross.' '.$currency, 
+                    l(format_date($txn->transaction_date), 'admin/paypal/transaction/'.$txn->txn_id), 
+                    $txn->payment_status);
+  }
+
+  if (!$rows) {
+    $rows[] = array(array('data' => t('No transactions were found.'), 'colspan' => 6));
+
+  }
+  if ($pager = theme('pager', NULL, 25, 0, tablesort_pager())) {
+    $rows[] = array(array('data' => $pager, 'colspan' => '6'));
+  }
+
+  $output .= '<br />';
+  $output .= theme('box', t('Transaction history'), theme('table', $header, $rows));
+
+  drupal_set_title(t('Item stats: %item', array('%item' => $item_name)));
+  print theme('page', $output);
+
+}
+
+
+function _paypal_payer_stats($payer_id = NULL) {
+
+  if (!$payer_id) {
+    $payer_id = arg(3);
+  }
+
+  if (db_num_rows(db_query("SELECT payer_id FROM {paypal_payer} WHERE payer_id='%s'", $payer_id)) < 1) {
+    drupal_set_message(t('Invalid user ID: '.$payer_id), 'error');
+    drupal_goto('admin/paypal');
+    return;
+  }
+
+  $e = db_query("SELECT payer_email from {paypal_email} WHERE payer_id='%s'", $payer_id);
+  while ($r = db_fetch_object($e)) {
+    $email .= l($r->payer_email, 'mailto:'.$r->payer_email).'<br/>';
+  }
+
+  $order = db_fetch_object(db_query("SELECT count(payer_id) as trans, sum(mc_gross) as gross, sum(mc_fee) as fee from {paypal_log} WHERE payer_id='%s'", $payer_id));
+
+  $order_sum = t('Gross received from payer: %payout <br/>PayPal fees: %fees <br/> Net received from payer: %net',
+                 array('%payout' => number_format($order->gross, 2), '%fees' => number_format($order->fee, 2), '%net' => number_format($order->gross - $order->fee, 2))
+                );
+
+  $page = theme('box', t('Emails used'), $email);
+  $page .= '<br/>';
+  $page .= theme('box', t('Totals'), $order_sum);
+
+  $header = array(t('Username'),
+                  array('data' => t('Email address'), 'field' => 'payer_email'),
+                  array('data' => t('Gross'), 'field' => 'mc_gross'),
+                  array('data' => t('Transaction date'), 'field' => 'transaction_date', 'sort' => 'desc'),
+                  array('data' => t('Status'), 'field' => 'ppl.payment_status'),
+                  array('data' => t('Item'), 'field' => 'ppl.item_name')
+                 );
+
+  $result = pager_query('SELECT u.uid, u.name as username, ppl.payer_email AS email_address,
+                          concat(ppp.first_name, " ", ppp.last_name) as realname,
+                          ppl.mc_gross AS gross, ppl.item_name, ppl.item_number, ppl.txn_id,
+                          UNIX_TIMESTAMP(ppl.transaction_date) AS transaction_date, ppl.payment_status,
+                          ppl.mc_currency AS currency
+                        FROM {paypal_log} ppl
+                          LEFT JOIN {users} u ON ppl.payer_email=u.mail
+                          LEFT JOIN {paypal_payer} ppp ON ppl.payer_id=ppp.payer_id
+                        WHERE ppl.payer_id="%s"
+                        %s',
+                        50, 0, NULL, $payer_id, tablesort_sql($header));
+
+  $currencies = array('USD' => 'US$', 'CAD' => 'CA$', 'GBP' => '&pound;', 'EUR' => '&euro;', 'YEN' => '&yen;');
+
+  while ($txn = db_fetch_object($result)) {
+    // I'm saving these for use outside the while() loop.
+    // The last iteration of the loop leaves $txn empty.
+    $item_name = $txn->item_name;
+    $realname = $txn->realname;
+
+    $currency = $currencies[$txn->currency];
+
+    $rows[] = array(l($txn->username, 'user/'.$txn->uid),
+                    $txn->email_address,
+                    $txn->gross.' '.$currency,
+                    l(format_date($txn->transaction_date), 'admin/paypal/transaction/'.$txn->txn_id),
+                    $txn->payment_status,
+                    l($txn->item_name, 'admin/paypal/item/'.$txn->item_number));
+  }
+
+  if (!$rows) {
+    $rows[] = array(array('data' => t('No transactions were found.'), 'colspan' => 7));
+
+  }
+  if ($pager = theme('pager', NULL, 50, 0, tablesort_pager())) {
+    $rows[] = array(array('data' => $pager, 'colspan' => '7'));
+  }
+
+  $page .= '<br />';
+  $page .= theme('box', t('Transaction history'), theme('table', $header, $rows));
+
+  drupal_set_title(t('Payer stats: %payer', array('%payer' => $realname)));
+  print theme('page', $page);
+
+}
+
+
+function _paypal_page_stats() {
+
+  $queue_size = 'SELECT count(log) as queue from {paypal_queue}';
+  $parent_transactions = 'SELECT count(txn_id) as txn, sum(mc_gross) as gross, sum(mc_fee) as fee from {paypal_log} as b WHERE b.parent_txn_id is NULL';
+  $sub_transactions = 'SELECT count(txn_id) as txn, sum(mc_gross) as gross, sum(mc_fee) as fee  from {paypal_log} as b WHERE b.parent_txn_id is not NULL';
+  $top_payer = "SELECT sum(a.mc_gross) as gross, sum(a.mc_fee) as fee, count(distinct a.txn_id) as tran, b.payer_id, concat(b.first_name, ' ', b.last_name) as name from {paypal_log} as a LEFT JOIN {paypal_payer} as b ON a.payer_id = b.payer_id GROUP BY a.payer_id ORDER BY gross DESC, tran DESC LIMIT 5";
+
+  $t = db_fetch_object(db_query($queue_size));
+  $q_size = $t->queue;
+  unset($t);
+
+  $t = db_fetch_object(db_query($parent_transactions));
+  $p_trans = $t->txn;
+  $p_gross = $t->gross;
+  $p_fee = $t->fee;
+  unset($t);
+
+  $t = db_fetch_object(db_query($sub_transactions));
+  $s_trans = $t->txn;
+  $s_gross = $t->gross;
+  $s_fee = $t->fee;
+  unset($t);
+    
+  $tran_stats = t('Items remaining in queue: %q_size <br/>Total unique transactions:  %p_trans<br/>Total sub transactions: %s_trans<br/>Total Transactions: %total ', array('%total' => ($p_trans+$s_trans), '%q_size' => $q_size, '%p_size' => $p_size, '%s_trans' => $s_trans, '%p_trans' => $p_trans ));
+    
+  $payer_row = array();
+  $t = db_query($top_payer);
+  $p = 0;
+  $payer_header = array(t('Payer'), t('Net total'), t('Transactions'));
+  while ($r = db_fetch_object($t)) {
+    $payer_row[$p] = array();
+    $payer_row[$p][] = l($r->name, 'admin/paypal/payer/'.$r->payer_id);
+    $net = floatval($r->gross - $r->fee);
+    $net_tra = ($p_gross-$p_fee)+($s_gross-$s_fee);
+    $net_per = ($net_tra == 0)?0:100 *$net/ $net_tra; // Check for div0
+    $payer_row[$p][] = '$'. number_format($net, 2) .' ('. round(abs($net_per), 2) .'%)';
+    $payer_row[$p][] = $r->tran .' ('. round((100*$r->tran/($s_trans + $p_trans)), 2).'%)';
+    $p++;
+  }
+  unset($t);
+
+    
+  $txn_header = array(array('data' => t('Username'), 'field' => 'u.name'),
+                      array('data' => t('Real name'), 'field' => 'last_name'),
+                      array('data' => t('Email address'), 'field' => 'payer_email'),
+                      array('data' => t('Gross'), 'field' => 'mc_gross'),
+                      array('data' => t('Transaction date'), 'field' => 'transaction_date', 'sort' => 'desc'),
+                      array('data' => t('Transaction ID'), 'field' => 'txn_id'),
+                      array('data' => t('Item'), 'field' => 'item_name'),
+                      array('data' => t('Status'), 'field' => 'ppl.payment_status')
+                     );
+
+  $result = pager_query('SELECT u.uid, u.name as username, ppl.payer_email AS email_address,
+                          concat(ppp.first_name, " ", ppp.last_name) as realname, ppp.payer_id,
+                          ppl.mc_gross AS gross, ppl.item_name, ppl.item_number, ppl.txn_id,
+                          UNIX_TIMESTAMP(ppl.transaction_date) AS transaction_date, ppl.payment_status,
+                          ppl.mc_currency AS currency
+                        FROM {paypal_log} ppl
+                          LEFT JOIN {users} u ON ppl.payer_email=u.mail
+                          LEFT JOIN {paypal_payer} ppp ON ppl.payer_id=ppp.payer_id
+                        %s',
+                        15, 0, NULL, tablesort_sql($txn_header));
+
+  while ($txn = db_fetch_object($result)) {
+    $item_name = $txn->item_name;
+    $currency = $currencies[$txn->currency];
+    $view_stats = ($txn->payer_id ? l(t('view user stats'), 'admin/paypal/payer/'.$txn->payer_id) : '');
+
+    $txn_rows[] = array(l($txn->username, 'user/'.$txn->uid), 
+                        l($txn->realname, 'admin/paypal/payer/'.$txn->payer_id), 
+                        $txn->email_address, 
+                        $txn->gross.' '.$currency, 
+                        format_date($txn->transaction_date), 
+                        l($txn->txn_id, 'admin/paypal/transaction/'.$txn->txn_id),
+                        l($txn->item_name, 'admin/paypal/item/'.$txn->item_number),
+                        $txn->payment_status);
+  }
+
+  if (!$txn_rows) {
+    $txn_rows[] = array(array('data' => t('No transactions were found.'), 'colspan' => 8));
+
+  }
+  if ($txn_pager = theme('pager', NULL, 15, 0, tablesort_pager())) {
+    $txn_rows[] = array(array('data' => $txn_pager, 'colspan' => '8'));
+  }
+
+
+  $page = theme('box', t('Transaction stats'), $tran_stats);
+  $page .= '<br/>';
+  $page .= theme('box', t('Top 5 payees'), theme('table', $payer_header, $payer_row));
+  $page .= '<br />';
+  $page .= theme('box', t('Transaction history'), theme('table', $txn_header, $txn_rows));
+
+  print theme('page', $page);
+
+}
+
+
+function _paypal_log($field = array()) {
+
+  /**
+   * Logging transaction information to the database.
+   * Queueing and rate limiting have already occurred.
+   */
+
+  /**
+   *  Init table layouts
+   *  to be used later for INSERTs
+   *  and UPDATEs.
+   */
+
+  $table = array();
+  $table['payer'] = array('payer_id' => '',
+                          'first_name' => '',
+                          'last_name' => '',
+                          'address_street' => '',
+                          'address_city' => '',
+                          'address_zip' => '',
+                          'address_country' => '',
+                          'address_status' => '',
+                          'payer_status' => ''
+                         );
+
+  $table['log'] = array('txn_id' => '',
+                        'parent_txn_id' => '',
+                        'payment_date' => '',
+                        'txn_type' => '',
+                        'business' => '',
+                        'receiver_id' => '',
+                        'receiver_email' => '',
+                        'payer_id' => '',
+                        'payer_email' => '',
+                        'option_name1' => '',
+                        'option_selection1' => '',
+                        'option_name2' => '',
+                        'option_selection2' => '',
+                        'item_name' => '',
+                        'mc_currency' => '',
+                        'payment_type' => '',
+                        'payment_gross' => '',
+                        'payment_fee' => '',
+                        'mc_gross' => '',
+                        'mc_fee' => '',
+                        'tax' => '',
+                        'item_number' => '',
+                        'quantity' => '',
+                        'payment_status' => '',
+                        'reason_code' => '',
+                        'memo' => '',
+                        'verify_sign' => '',
+                        'notify_version' => ''
+                       );
+
+  $table['email'] = array('payer_id' => '',
+                          'payer_email' => '',
+                         );
+
+  $insert = array('log' => '',
+                  'email' => '',
+                  'payer' => ''
+                 );
+
+  $values = array('log' => '',
+                  'email' => '',
+                  'payer' => ''
+                 );
+    
+  if (variable_get('paypal_mysql_delayed', 0) )
+    $delayed = 'DELAYED';
+  else
+    $delayed = '';
+
+  /** 
+   * The purpose of this is to insert into the tables JUST 
+   * when there is data to insert. We don't want to insert ''
+   * because that is not NULL.
+   *
+   * $insert[$key] = '('.implode(',', array_keys($table[$key])).')'
+   * will not work.
+   *
+   * We also init the table values so we can do an easy insert.
+   *
+   */
+
+  foreach( array_keys($insert) as $key ) {
+    foreach( array_keys($table[$key]) as $k ) {
+      if ( $field[$k] != '' ) {
+        $insert[$key][] = $k;
+        $values[$key][] = $field[$k];
+        $table[$key][$k] = $field[$k];  // Just incase we end up doing UPDATE
+      }
+    }
+  }
+
+  /**
+   * We have a problem here because the %s and %d variables are automatically passed through check_query(),
+   * but the check is applied to the whole variable.  We need to check_query() each value individually, and
+   * only once.  This means we must pass each value to db_query() individually, and we should not do check_query()
+   * before then.
+   *
+   * I think we can pass $insert['log'] as a variable, which will be expanded in the arg list.  But do we need
+   * more than one %s?  If so, how to we make the right number of %s's?
+   *
+   * Or we could take our lives in our hands--and those of everyone who will use this after us--and perform
+   * security checks ourselves.
+   *
+   * Or we could be really sneaky and pull a 'hack'. :]  We're going to use str_repeat() and the special
+   * nature of check_query() when arg1 is an array.
+   */
+
+  /**
+   *  Construct the SQL string into which sprintf() will insert variables.  There is no user-supplied text here.
+   * The next line creates a string with the right number of quoted %s's and then strips off the last 2 characters.
+   */
+  $value_string = substr(str_repeat('"%s", ', count($values['log'])), 0, -2);
+
+  /**
+   * check_query(), if it determines arg1 is an array, will behave more like vsprintf() than sprintf().
+   * I'd like to take this opportunity to thank the genius who wrote check_query() with this helpful exception!
+   */
+  $args = array_merge(array($delayed, implode(', ', $insert['log'])), $values['log']);
+
+  db_query("INSERT %s INTO {paypal_log} (%s) VALUES ($value_string)", $args);
+
+  $doupdate = db_fetch_object(db_query("SELECT count(*) as payer from {paypal_payer} where payer_id='%s'", $table['payer']['payer_id']));
+
+  if ( $doupdate->payer > 0 ) {
+    /*
+     * We already checked for empty strings when we created $insert.
+     * We'll use our new 'hack' as discussed above to supply a variable number of arguments to db_query().
+     *
+     * The real question is, "What happens when a number is passed to %s?"  PHP should be able to handle it, 
+     * but can the database?  I think so.  I haven't received any errors yet during my testing with MySQL.
+     */
+
+    $v = '';
+    /**
+     * There is no user-supplied text here, so we'll put this variable right into the SQL statement.
+     */
+    foreach($insert['payer'] as $key) {
+      $v .= $key.'="%s", ';
+    }
+    $v = substr($v, 0, -2);
+    $args = array_merge($values['payer'], array($table['payer']['payer_id']));
+
+    db_query("UPDATE {paypal_payer} SET $v WHERE payer_id='%s'", $args);
+  }
+  else {
+    $value_string = substr(str_repeat('"%s", ', count($values['payer'])), 0, -2);
+    $args = array_merge(array($delayed), array(implode(', ', $insert['payer'])), $values['payer']);
+
+    db_query("INSERT %s INTO {paypal_payer} (%s) VALUES ($value_string)", $args);
+  }
+
+  unset($doupdate );
+  unset($v);
+
+  $doupdate = db_fetch_object(db_query("SELECT count(*) as payer from {paypal_email} where payer_email='%s'", $table['email']['payer_email']));
+
+  if ( $doupdate->payer > 0 ) {
+    $v = '';
+    foreach($table['email'] as $key => $value) {
+      $v .= $key.'="%s", ';
+    }
+    $v = substr($v, 0, -2);
+    $args = array_merge($values['email'], array($table['email']['payer_email']));
+
+    db_query("UPDATE {paypal_email} set $v WHERE payer_email='%s'", $args);
+  }
+  else {
+    $value_string = substr(str_repeat('"%s", ', count($values['email'])), 0, -2);
+    $args = array_merge(array($delayed), array(implode(', ', $insert['email'])), $values['email']);
+
+    db_query("INSERT %s INTO {paypal_email} (%s) VALUES ($value_string)", $args);
+  }
+
+  /**
+   * Allow other paypal-related modules to act immediately upon this transaction by
+   * calling hook_paypal_transaction($field) for all modules;  This hook is called
+   * only after information has been logged to the database which--if you have enabled
+   * database queueing--may not be the same instant that PayPal posts
+   * IPN information to the web site.
+   *
+   * This hook is invoked once for every PayPal transaction, so be careful what you write!
+   */
+  module_invoke_all('paypal_transaction', $field); 
+
+}
+
+function _paypal_post($data = array()) {
+
+  $post = '';
+  foreach($data as $key => $value) {
+    $post .= $key .'='. urlencode($value).'&';
+  }
+  $post .= 'cmd=_notify-validate';
+
+  return $post;
+
+}
+
+function _paypal_ipn_receive($vars = 0, $op = 'queue') {
+
+  $vars = ($vars == 0 ? _paypal_init($_POST) : $vars); // If not processing the queue
+
+
+  // If the email isn't in our ACL, ppffft, done
+  if (!_paypal_verify_email($vars)) { 
+    return false; // can't exit here, must return false
+                  // so that we can process the queue
+  }
+
+  // if Queueing active, store it, and stop 
+  if ( variable_get('paypal_ver_queue', 0) && isset($vars['receiver_email']) && $op == 'queue') { 
+    _paypal_queue($vars);                    
+    exit;                             
+  }
+
+
+
+  switch(variable_get('paypal_postmethod', 'fsock') ) {
+    case 'curl':
+      $info = _paypal_post_curl($vars);
+      break;
+    case 'libCurl':
+      $info = _paypal_post_libcurl($vars);
+      break;
+    case 'fsock':
+    default:
+      $info = _paypal_post_fsock($vars);
+      break;
+  }
+
+  if (eregi('VERIFIED', $info)) { // well, if paypal verifies it, its worth logging
+    _paypal_log($vars);           // if not, what do I care?
+  }
+
+}
+
+
+function _paypal_post_fsock($var = array()) {
+
+  $url = parse_url(variable_get('paypal_post', 'https://www.paypal.com/cgi-bin/webscr'));
+  if ($url['scheme'] == 'https') {
+    $url['port'] = '443';
+    $ssl = 'ssl://';
+  } 
+  else {
+    $url['port'] = '80';
+  }
+
+  $sess = @fsockopen($ssl . $url['host'], $url['port'], $errno, $errstr, 30);
+  if ( $sess ) {
+    fputs($sess, "POST $url[path] HTTP/1.1\r\n"); 
+    fputs($sess, "Host: $url[host]\r\n"); 
+    fputs($sess, "Content-type: application/x-www-form-urlencoded\r\n"); 
+    fputs($sess, 'Content-length: '.strlen(_paypal_post($var))."\r\n"); 
+    fputs($sess, "Connection: close\r\n\r\n"); 
+    fputs($sess, _paypal_post($var) . "\r\n\r\n"); 
+
+    while (!feof($sess)) {
+      $info[] = @fgets($sess, 1024); 
+    }
+
+    $info = implode(',', $info);
+  }
+  fclose($sess);
+
+  return $info;
+
+}
+
+function _paypal_post_libcurl($var = array()) {
+
+  $url = variable_get('paypal_post', 'https://www.paypal.com/cgi-bin/webscr');
+  // this code was from the php_pdn 
+  $ch = curl_init();
+
+  curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+  curl_setopt($ch, CURLOPT_URL, $url);
+  curl_setopt($ch, CURLOPT_POST, 1);
+  curl_setopt($ch, CURLOPT_POSTFIELDS, _paypal_post($var));
+
+  //Start ob to prevent curl_exec from displaying stuff.
+  ob_start();
+  curl_exec($ch);
+
+  //Get contents of output buffer
+  $info = ob_get_contents();
+  curl_close($ch);
+
+  //End ob and erase contents.
+  ob_end_clean();
+
+  return $info;
+
+}
+
+function _paypal_post_curl($var = array()) {
+
+  $url = variable_get('paypal_post', 'https://www.paypal.com/cgi-bin/webscr');
+  exec(variable_get('paypal_curl', '/usr/bin/curl') .' -d "'._paypal_post($var)."\" $url", $info);
+  $info = implode(',', $info);
+  return $info;
+
+}
+
+function _paypal_init($field = array()) {
+
+  $paypal = array();
+  foreach( $field as $key => $value ) {
+    $paypal[$key] = $value;
+  }
+
+  return $paypal;
+ 
+}
+
+function _paypal_verify_email($field = array()) {
+
+  /**
+   * All we are doing here is making sure that we aren't logging
+   * useless information.  We want to make sure that all the transaction
+   * information logged from PayPal is only for the PayPal accounts
+   * that you want to track.
+   */
+  $email = explode("\n", variable_get('paypal_emails', ''));
+  foreach( $email as $addr) {
+    if (strtolower(rtrim($field['receiver_email'])) == strtolower(rtrim($addr))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+function _paypal_queue($field) {
+
+  if (variable_get('paypal_mysql_delayed', 0)) {
+    $delayed = 'DELAYED';
+  }
+  else {
+    $delayed = '';
+  }
+
+  db_query("INSERT %s INTO {paypal_queue} (value) VALUES('%s')", $delayed, serialize($field));
+
+}
+
+
+function _paypal_process_queue() {
+
+  $hours = variable_get('paypal_last_queue', time());
+  $lapse = intval(((time() - $hours )/60)/60);           // set the number of runs.
+  $lapse = ($lapse < 1) ? 1 : $lapse;                    // Make sure that you run atleast every time cron.php is accessed.
+  $limit = variable_get('paypal_ver_limit', 5) * $lapse; // Hours lapses * Limit/hour.
+  $hardlimit = variable_get('paypal_ver_max', 20);
+  if (variable_get('paypal_ver_max', 0) != 0) {          // See if the limiter is enabled.
+    $limit = ($hardlimit < $limit) ? $hardlimit : $limit;
+  }
+
+  // Fetch a limited number of queued log entries.
+  $result = db_query('SELECT log, value FROM {paypal_queue} LIMIT %d', $limit);
+
+  // Process queued log entries individually.
+  while ($row = db_fetch_object($result) ) {
+    _paypal_ipn_receive(unserialize($row->value), 'process');
+  }
+
+  /**
+   * We need to delete the same log entries we just processed. If we impose
+   * a non-standard order to the results in the 'SELECT', we need to do the
+   * same in the 'DELETE ... LIMIT'.
+   *
+   * We could use 'ORDER BY log', except MySQL < 4.0 does not support it. So
+   * I propose we do not use 'ORDER BY' in the 'SELECT' statement.
+   *
+   * ~ Nic Ivy
+   */
+  db_query('DELETE FROM {paypal_queue} LIMIT %d', $limit);
+  variable_set('paypal_last_queue', time());
+
+}
+
+?>

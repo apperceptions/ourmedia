@@ -1,0 +1,259 @@
+<?php
+// $Id: trackback.module,v 1.14 2004/10/14 01:28:29 ankur Exp $
+
+function trackback_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t("Allow for sending and receiving TrackBacks, which is a way for sites to notify another that they have commented on a post.");
+  }
+}
+
+function trackback_receive(&$node) {
+  // Process TrackBack post data.
+  $trackback->url = check_url($_REQUEST['url']);
+  if ($trackback->url && valid_url($_REQUEST['url'], TRUE)) {
+    $trackback->excerpt = (strlen($_REQUEST['excerpt'] > 255) ? truncate_utf8($_REQUEST['excerpt'], 252) .'...' : $_REQUEST['excerpt']);
+    $trackback->name = ($_REQUEST['blog_name']) ? $_REQUEST['blog_name'] : $trackback->url;
+
+    // Save TrackBack as comment
+    // TODO: Make a comment_insert in the comment module to prevent duplication of code here.
+    $subject = strip_tags(($_REQUEST['title']) ? $_REQUEST['title'] : $trackback->url);
+    $trackback_author = strip_tags($trackback->name) .' '. t('(trackback)');
+    $cid = db_next_id("{comments}_cid");
+    $thread = rtrim(db_result(db_query('SELECT MAX(thread) FROM {comments} WHERE nid = %d', $node->nid)), '/') + 1;
+    
+    db_query('INSERT INTO {comments} (cid, nid, pid, uid, subject, comment, format, hostname, timestamp, status, score, users, thread, name, mail, homepage) VALUES (%d, %d, %d, %d, \'%s\', \'%s\', %d, \'%s\', %d, %d, %d, \'%s\', \'%d/\', \'%s\', NULL, \'%s\')',
+             $cid, $node->nid, 0, 0, $subject, $trackback->excerpt, variable_get('filter_default_format', 1), getenv("REMOTE_ADDR"), time(), 0, 0, '', $thread, $trackback_author, $trackback->url);
+	     
+    watchdog('special', t('trackback: added \'%subject\'', array('%subject' => $subject)), l(t('view comment'), 'node/'. $node->nid .'#'. $cid));
+    
+    db_query('INSERT INTO {trackback_received} (nid, cid, url) VALUES (%d, %d, \'%s\')', $node->nid, $cid, $trackback->url);
+    _comment_update_node_statistics($node->nid);
+    $error = 0;
+  }
+  else {
+    $error = 1;
+    $message = t('Missing TrackBack url.');
+  }
+
+  // Generate response
+  $output = '<?xml version="1.0" encoding="utf-8"?>' ."\n";
+  $output .= '<response>'. "\n";
+  $output .= '<error>'. $error .'</error>' ."\n";
+  $message and $output .= '<message>'. $message .'</message>'."\n";
+  $output .= '</response>'."\n";
+
+  return $output;
+}
+
+function trackback_page($nid = null) {
+  if (is_numeric($nid) && $node = node_load(array("nid" => $nid))) {
+    header("Content-Type: text/xml");
+    print trackback_receive($node);
+  }
+  else {
+    drupal_goto();
+  }
+}
+
+function trackback_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
+  global $trackback_node;
+  switch ($op) {
+    case "view":
+      $url = url("node/$node->nid", NULL, NULL, TRUE);
+      $tb_url = url("trackback/$node->nid", NULL, NULL, TRUE);
+      $autodetect_comments .= "\n<!--\n";
+      $autodetect_comments .= "<rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:trackback=\"http://madskills.com/public/xml/rss/module/trackback/\">\n";
+      $autodetect_comments .= "<rdf:Description rdf:about=\"$url\" dc:identifier=\"$url\" dc:title=\"$node->title\" trackback:ping=\"$tb_url\" />\n";
+      $autodetect_comments .= "</rdf:RDF>\n";
+      $autodetect_comments .= "-->\n";
+      if ($teaser) {
+        $node->teaser = $node->teaser . $autodetect_comments;
+      }
+      else {
+        $node->body = $node->body . $autodetect_comments;
+      }
+      break;
+      
+    case "form post":
+      $output = form_textarea(t("URLs"), "trackback_urls", $node->trackback_urls, 80, 4, t("Enter one URL per line for each trackback you wish to send."));
+
+      // if there are any past successful trackbacks from this posting, add them to the node editing page.
+      // if there are any past unsuccessful trackbacks from this posting, add checkmarks to enable resending them
+      $past_successes_listing = '';
+      $options = array();
+      $result = db_query('SELECT url, successful FROM {trackback_sent} WHERE nid = %d', $node->nid);
+      while ($url = db_fetch_object($result)) {
+        if ($url->successful) {
+          $past_successes_listing .= $url->url .'<br/>';
+        }
+        else {
+          $options[$url->url] = $url->url;
+        }
+      }
+  
+      // add listing of successfully trackbacked URLs
+      if ($past_successes_listing != '') {
+        $output .= theme('form_element', t('Successful URLs'), $past_successes_listing, t('These URLs have been successfuly pinged by this post.'));
+      }
+ 
+      // add listing of unsuccessfully trackbacked URLs
+      if (count($options)) {
+        $output .= form_checkboxes(t('Unsuccessful URLs'), 'trackback_urls_to_retry', array(), $options, t('Attempts to ping these URLs with this post have failed.  Mark a check next to the trackback URLs you wish to retry for this post.'));
+      }
+      
+      $output = form_group(t('Send trackbacks'), $output);
+      return $output;
+      
+    case 'validate':
+      $node->trackback_urls_array = explode("\n", $node->trackback_urls);
+      foreach ($node->trackback_urls_array as $id => $url) {
+        $node->trackback_urls_array[$id] = trim($url);
+        if ($node->trackback_urls_array[$id] != '' && !valid_url($node->trackback_urls_array[$id], TRUE)) {
+          form_set_error('trackback_urls', t('The trackback url %url is not a valid url.', array('%url' => '<em>'. $node->trackback_urls_array[$id] .'</em>')));
+        }
+      }
+      break;
+      
+    case "insert":
+    case "update":
+      $trackback_node = $node;
+  }
+}
+
+function trackback_link($type, $node = NULL, $teaser = FALSE) {
+  $links = array();
+  
+  if ($type == 'node' && $teaser) {
+    $count = db_fetch_object(db_query('SELECT count(*) AS tbcount from {comments} c INNER JOIN {trackback_received} tr ON c.cid = tr.cid WHERE c.nid = %d', $node->nid));
+    $links[] = l(format_plural($count->tbcount, '1 trackback', '%count trackbacks'), 'node/'. $node->nid .'/trackback');
+  }
+
+  return $links;
+}
+
+
+function trackback_menu($may_cache = FALSE) {
+  $items = array();
+  
+  if ($may_cache) {
+    $items[] = array('path' => 'trackback', 'title' => t('trackbacks'),
+                   'callback' => 'trackback_page',
+                   'access' => user_access('access content'),
+                   'type' => MENU_DYNAMIC);
+  }
+  else {
+    if (arg(0) == 'node' && is_numeric(arg(1))) {
+      $node = node_load(array('nid' => arg(1)));
+      $items[] = array('path' => 'node/'. $node->nid .'/trackback', 'title' => t('trackbacks'), 'callback' => 'trackback_node_page', 'access' => node_access('view', $node), 'type' => MENU_LOCAL_TASK);
+    }
+  }
+  return $items;
+}
+
+function trackback_node_page() {
+  $output = '';
+  if ($node = node_load(array('nid' => arg(1)))) {
+    $output .= node_view($node, FALSE, FALSE);
+    $output .= theme('box', t('Trackback URL for this post:'), url('trackback/'. $node->nid, NULL, NULL, TRUE));
+    $output .= theme('box', '', t('Listed below are links to weblogs that reference this post:'));
+    
+    $result = db_query('SELECT c.cid AS cid, c.nid AS nid, c.timestamp AS timestamp, c.format AS format, c.comment AS comment, c.subject AS subject, c.name AS name, c.homepage AS homepage FROM {comments} c INNER JOIN {trackback_received} tr ON c.cid = tr.cid WHERE tr.nid = %d ORDER BY timestamp DESC', $node->nid);
+ 
+    while ($comment = db_fetch_object($result)) {
+      $comment->name = $comment->registered_name ? $comment->registered_name : $comment->name;
+      $output .= theme('comment_view', $comment, theme('links', comment_links($comment, FALSE)));
+    }
+
+    print theme('page', $output, $node->title);
+  }
+  else {
+    drupal_not_found();
+  } 
+}
+
+
+function trackback_exit() {
+  global $trackback_node;
+  
+  if ($trackback_node) {
+    //gather together data from node fields and format as a ping message
+    $edit = $_POST['edit'];
+    $params = array('title' => $trackback_node->title, 'excerpt' => truncate_utf8(check_output($trackback_node->teaser), 255), 'blog_name' => variable_get('site_name', ''), 'url' => url('node/'. $trackback_node->nid, NULL, NULL, 1) );
+    
+    foreach ($params as $key => $value) {
+      $str[] = $key .'='. urlencode($value);
+    }
+        
+    // Gather URLs to send pings to.
+    
+    // First, group together the ping-urls entered by the user with the auto-detected ping-urls
+    $trackback_node->trackback_urls_array = array_unique(array_merge($trackback_node->trackback_urls_array, trackback_urls_via_nodebody($trackback_node)));
+    
+    // From the group, take out URLs that have already been pinged.
+    $trackback_node->trackback_urls_array = array_flip($trackback_node->trackback_urls_array);
+    $result = db_query('SELECT url FROM {trackback_sent} WHERE nid = %d', $trackback_node->nid);
+    while ($already_tried_url = db_fetch_object($result)) {
+      unset($trackback_node->trackback_urls_array[$already_tried_url->url]);
+    }
+    $trackback_node->trackback_urls_array = array_flip($trackback_node->trackback_urls_array);
+    
+    // add back into group the urls that were unsuccessfully pinged but selected for a retry by the user
+    $trackback_node->trackback_urls_array = array_unique(array_merge($trackback_node->trackback_urls_array, $edit['trackback_urls_to_retry']));
+    
+    
+    foreach ($trackback_node->trackback_urls_array as $url) {
+      if ($url != '') {
+        $http_reply = drupal_http_request($url, $headers = array('Content-Type' => 'application/x-www-form-urlencoded'), 'POST', implode('&', $str));
+  
+        db_query('REPLACE INTO {trackback_sent} (nid, url, successful) VALUES (%d, \'%s\', %d)', $trackback_node->nid, $url, $http_reply->error ? 0 : 1);
+      }
+    }
+    $trackback_node = NULL; 
+  }
+  
+}
+
+
+function trackback_urls_via_nodebody($node) {
+  // First, grab anything that looks like a url from the body of the node.
+  $parsed_urls = array();
+  preg_match_all("/(http|https):\/\/[a-zA-Z0-9@:%_~#?&=.,\/;-]*[a-zA-Z0-9@:%_~#&=\/;-]/", $node->body, $parsed_urls);
+  $parsed_urls = array_unique($parsed_urls[0]);
+  
+  // Now, send http HEAD requests so we can see if the content type is something that *might* contain
+  // autodetection text.  In other words, check if Content-Type of each URL is text based rather than digital,
+  // and keep only those that are.
+  $tryable_urls = array();
+  foreach($parsed_urls as $url) {
+    if (_trackback_url_parsable_content($url)) {
+      $tryable_urls[] = $url;
+    }
+  }
+  
+  //Finally, from the array of tryable urls, download each page, scan each, and compile
+  //a list of all the trackback URLs listed in the first RDF of each scanned page. 
+  $trackback_urls_from_nodebody = array();
+  foreach ($tryable_urls as $url) {
+    $http_reply = drupal_http_request($url);
+    if (!$http_reply->error) {
+      $trackbackurl = preg_replace('/.*<rdf:RDF.*trackback:ping="([^"]+)".*<\/rdf:RDF>.*/s', '\1', $http_reply->data);
+      if ($trackbackurl && valid_url($trackbackurl, TRUE)) {
+        $trackback_urls_from_nodebody[] = $trackbackurl;
+      }
+    }
+  }
+  return array_unique($trackback_urls_from_nodebody);
+}
+
+
+function _trackback_url_parsable_content($url) {
+  $http_reply = drupal_http_request($url, array(), 'HEAD');
+  $content_type = $http_reply->headers['Content-Type'];
+  
+  return (substr_count($content_type, 'text/html') || substr_count($content_type, 'application/xhtml+xml') || substr_count($content_type, 'application/xml') || substr_count($content_type, 'text/xml')); 
+}
+
+
+
+?>

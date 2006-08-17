@@ -1,0 +1,1536 @@
+-- MySQL dump 10.9
+--
+-- Host: localhost    Database: ourmedia_new
+-- ------------------------------------------------------
+-- Server version	4.1.11-Debian_0.dotdeb.0-log
+
+/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
+/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
+/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
+/*!40101 SET NAMES utf8 */;
+/*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
+/*!40014 SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0 */;
+/*!40101 SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO' */;
+/*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
+
+--
+-- Table structure for table `access`
+--
+
+DROP TABLE IF EXISTS `access`;
+CREATE TABLE `access` (
+  `aid` tinyint(10) NOT NULL auto_increment,
+  `mask` varchar(255) NOT NULL default '',
+  `type` varchar(255) NOT NULL default '',
+  `status` tinyint(2) NOT NULL default '0',
+  PRIMARY KEY  (`aid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `accesslog`
+--
+
+DROP TABLE IF EXISTS `accesslog`;
+CREATE TABLE `accesslog` (
+  `title` varchar(255) default NULL,
+  `path` varchar(255) default NULL,
+  `url` varchar(255) default NULL,
+  `hostname` varchar(128) default NULL,
+  `uid` int(10) unsigned default '0',
+  `timestamp` int(11) unsigned NOT NULL default '0',
+  `aid` int(10) NOT NULL auto_increment,
+  PRIMARY KEY  (`aid`),
+  KEY `accesslog_timestamp` (`timestamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `aggregator_category`
+--
+
+DROP TABLE IF EXISTS `aggregator_category`;
+CREATE TABLE `aggregator_category` (
+  `cid` int(10) NOT NULL auto_increment,
+  `title` varchar(255) NOT NULL default '',
+  `description` longtext NOT NULL,
+  `block` tinyint(2) NOT NULL default '0',
+  PRIMARY KEY  (`cid`),
+  UNIQUE KEY `title` (`title`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `aggregator_category_feed`
+--
+
+DROP TABLE IF EXISTS `aggregator_category_feed`;
+CREATE TABLE `aggregator_category_feed` (
+  `fid` int(10) NOT NULL default '0',
+  `cid` int(10) NOT NULL default '0',
+  PRIMARY KEY  (`fid`,`cid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `aggregator_category_item`
+--
+
+DROP TABLE IF EXISTS `aggregator_category_item`;
+CREATE TABLE `aggregator_category_item` (
+  `iid` int(10) NOT NULL default '0',
+  `cid` int(10) NOT NULL default '0',
+  PRIMARY KEY  (`iid`,`cid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `aggregator_feed`
+--
+
+DROP TABLE IF EXISTS `aggregator_feed`;
+CREATE TABLE `aggregator_feed` (
+  `fid` int(10) NOT NULL auto_increment,
+  `title` varchar(255) NOT NULL default '',
+  `url` varchar(255) NOT NULL default '',
+  `refresh` int(10) NOT NULL default '0',
+  `checked` int(10) NOT NULL default '0',
+  `link` varchar(255) NOT NULL default '',
+  `description` longtext NOT NULL,
+  `image` longtext NOT NULL,
+  `etag` varchar(255) NOT NULL default '',
+  `modified` int(10) NOT NULL default '0',
+  `block` tinyint(2) NOT NULL default '0',
+  PRIMARY KEY  (`fid`),
+  UNIQUE KEY `title` (`title`),
+  UNIQUE KEY `link` (`url`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `aggregator_item`
+--
+
+DROP TABLE IF EXISTS `aggregator_item`;
+CREATE TABLE `aggregator_item` (
+  `iid` int(10) NOT NULL auto_increment,
+  `fid` int(10) NOT NULL default '0',
+  `title` varchar(255) NOT NULL default '',
+  `link` varchar(255) NOT NULL default '',
+  `author` varchar(255) NOT NULL default '',
+  `description` longtext NOT NULL,
+  `timestamp` int(11) default NULL,
+  PRIMARY KEY  (`iid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `audio`
+--
+
+DROP TABLE IF EXISTS `audio`;
+CREATE TABLE `audio` (
+  `nid` int(10) NOT NULL default '0',
+  `audio_fileid` int(10) default NULL,
+  `photo_fileid` int(10) default NULL,
+  `photo_credit` varchar(255) default NULL,
+  `file_size` varchar(255) default NULL,
+  `length` varchar(255) default NULL,
+  `sampling_rate` varchar(255) default NULL,
+  `recording_mode` varchar(255) default NULL,
+  `audioformat` varchar(255) default NULL,
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `authmap`
+--
+
+DROP TABLE IF EXISTS `authmap`;
+CREATE TABLE `authmap` (
+  `aid` int(10) unsigned NOT NULL auto_increment,
+  `uid` int(10) NOT NULL default '0',
+  `authname` varchar(128) NOT NULL default '',
+  `module` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`aid`),
+  UNIQUE KEY `authname` (`authname`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `banner`
+--
+
+DROP TABLE IF EXISTS `banner`;
+CREATE TABLE `banner` (
+  `id` int(10) unsigned NOT NULL auto_increment,
+  `path` varchar(255) NOT NULL default '',
+  `uid` int(10) unsigned NOT NULL default '0',
+  `title` tinytext NOT NULL,
+  `url` text NOT NULL,
+  `position` tinyint(3) unsigned NOT NULL default '0',
+  `status` tinyint(3) unsigned NOT NULL default '0',
+  `day_notify` tinyint(3) unsigned NOT NULL default '0',
+  `week_notify` tinyint(3) unsigned NOT NULL default '0',
+  `failed_notify` int(3) unsigned NOT NULL default '0',
+  `reminder_sent` tinyint(1) unsigned NOT NULL default '0',
+  `publish_date` int(10) unsigned NOT NULL default '0',
+  `unpublish_date` int(10) unsigned NOT NULL default '0',
+  `chance` int(10) unsigned NOT NULL default '0',
+  `views` int(10) unsigned NOT NULL default '0',
+  `clicks` int(10) unsigned NOT NULL default '0',
+  `day_views` int(10) unsigned NOT NULL default '0',
+  `day_clicks` int(10) unsigned NOT NULL default '0',
+  `day_max_views` int(10) unsigned NOT NULL default '0',
+  `week_views` int(10) unsigned NOT NULL default '0',
+  `week_clicks` int(10) unsigned NOT NULL default '0',
+  `week_max_views` int(10) unsigned NOT NULL default '0',
+  `max_views` int(10) unsigned NOT NULL default '0',
+  `max_clicks` int(10) unsigned NOT NULL default '0',
+  `format` tinytext NOT NULL,
+  `created` int(10) unsigned NOT NULL default '0',
+  `width` int(10) unsigned NOT NULL default '0',
+  `height` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`id`),
+  KEY `path` (`path`),
+  KEY `uid` (`uid`),
+  KEY `publish_date` (`publish_date`),
+  KEY `unpublish_date` (`unpublish_date`),
+  KEY `day_notify` (`day_notify`),
+  KEY `week_notify` (`week_notify`),
+  KEY `reminder_sent` (`reminder_sent`),
+  KEY `status` (`status`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `blocks`
+--
+
+DROP TABLE IF EXISTS `blocks`;
+CREATE TABLE `blocks` (
+  `module` varchar(64) NOT NULL default '',
+  `delta` varchar(32) NOT NULL default '0',
+  `status` tinyint(2) NOT NULL default '0',
+  `weight` tinyint(1) NOT NULL default '0',
+  `region` tinyint(1) NOT NULL default '0',
+  `custom` tinyint(2) NOT NULL default '0',
+  `throttle` tinyint(1) NOT NULL default '0',
+  `types` text,
+  `visibility` tinyint(1) default '0',
+  `pages` text
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `book`
+--
+
+DROP TABLE IF EXISTS `book`;
+CREATE TABLE `book` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `parent` int(10) NOT NULL default '0',
+  `weight` tinyint(3) NOT NULL default '0',
+  `log` longtext,
+  PRIMARY KEY  (`nid`),
+  KEY `parent` (`parent`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `boxes`
+--
+
+DROP TABLE IF EXISTS `boxes`;
+CREATE TABLE `boxes` (
+  `bid` tinyint(4) NOT NULL auto_increment,
+  `title` varchar(64) NOT NULL default '',
+  `body` longtext,
+  `info` varchar(128) NOT NULL default '',
+  `format` int(4) NOT NULL default '0',
+  PRIMARY KEY  (`bid`),
+  UNIQUE KEY `info` (`info`),
+  UNIQUE KEY `title` (`title`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `buddylist`
+--
+
+DROP TABLE IF EXISTS `buddylist`;
+CREATE TABLE `buddylist` (
+  `uid` int(10) unsigned NOT NULL default '0',
+  `buddy` int(10) unsigned NOT NULL default '0',
+  `timestamp` int(11) NOT NULL default '0',
+  `received` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY  (`uid`,`buddy`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `cache`
+--
+
+DROP TABLE IF EXISTS `cache`;
+CREATE TABLE `cache` (
+  `cid` varchar(255) NOT NULL default '',
+  `data` longtext,
+  `expire` int(11) NOT NULL default '0',
+  `created` int(11) NOT NULL default '0',
+  `headers` text,
+  PRIMARY KEY  (`cid`),
+  KEY `expire` (`expire`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `comments`
+--
+
+DROP TABLE IF EXISTS `comments`;
+CREATE TABLE `comments` (
+  `cid` int(10) NOT NULL auto_increment,
+  `pid` int(10) NOT NULL default '0',
+  `nid` int(10) NOT NULL default '0',
+  `uid` int(10) NOT NULL default '0',
+  `subject` varchar(64) NOT NULL default '',
+  `comment` longtext NOT NULL,
+  `hostname` varchar(128) NOT NULL default '',
+  `timestamp` int(11) NOT NULL default '0',
+  `score` mediumint(9) NOT NULL default '0',
+  `status` tinyint(3) unsigned NOT NULL default '0',
+  `format` int(4) NOT NULL default '0',
+  `thread` varchar(255) NOT NULL default '',
+  `users` longtext,
+  `name` varchar(60) default NULL,
+  `mail` varchar(64) default NULL,
+  `homepage` varchar(255) default NULL,
+  PRIMARY KEY  (`cid`),
+  KEY `lid` (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `community_watch`
+--
+
+DROP TABLE IF EXISTS `community_watch`;
+CREATE TABLE `community_watch` (
+  `id` int(10) NOT NULL auto_increment,
+  `uid` int(10) NOT NULL default '0',
+  `type` tinyint(1) NOT NULL default '0',
+  `date` int(11) NOT NULL default '0',
+  `description` varchar(255) NOT NULL default '',
+  `action` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY  (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `copyright_node`
+--
+
+DROP TABLE IF EXISTS `copyright_node`;
+CREATE TABLE `copyright_node` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `cpyid` int(10) unsigned NOT NULL default '0',
+  `children_show_notice` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `copyrights`
+--
+
+DROP TABLE IF EXISTS `copyrights`;
+CREATE TABLE `copyrights` (
+  `cpyid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(60) NOT NULL default '',
+  `description` longtext,
+  `site_notice` longtext NOT NULL,
+  `node_notice` longtext NOT NULL,
+  `image_url` varchar(255) default NULL,
+  `source_url` varchar(255) default NULL,
+  `license` longtext,
+  PRIMARY KEY  (`cpyid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `creativecommons`
+--
+
+DROP TABLE IF EXISTS `creativecommons`;
+CREATE TABLE `creativecommons` (
+  `id` int(10) NOT NULL auto_increment,
+  `nid` int(10) NOT NULL default '0',
+  `data` text NOT NULL,
+  PRIMARY KEY  (`id`),
+  KEY `nid` (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `directory`
+--
+
+DROP TABLE IF EXISTS `directory`;
+CREATE TABLE `directory` (
+  `link` varchar(255) NOT NULL default '',
+  `name` varchar(128) NOT NULL default '',
+  `mail` varchar(128) NOT NULL default '',
+  `slogan` longtext NOT NULL,
+  `mission` longtext NOT NULL,
+  `timestamp` int(11) NOT NULL default '0',
+  PRIMARY KEY  (`link`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `editorselections`
+--
+
+DROP TABLE IF EXISTS `editorselections`;
+CREATE TABLE `editorselections` (
+  `id` int(10) unsigned NOT NULL auto_increment,
+  `media_kind` int(11) default NULL,
+  `weight` int(11) default NULL,
+  `media_url` text,
+  `media_page_url` text,
+  `screenshot_path` text,
+  `media_title` text,
+  `artist_name` text,
+  `artist_url` text,
+  `media_type` text,
+  `media_format` text,
+  `label1` text,
+  `text1` text,
+  `label2` text,
+  `text2` text,
+  `label3` text,
+  `text3` text,
+  `screenshot_url` text,
+  PRIMARY KEY  (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `event`
+--
+
+DROP TABLE IF EXISTS `event`;
+CREATE TABLE `event` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `location` text NOT NULL,
+  `start` int(10) unsigned NOT NULL default '0',
+  `data` text,
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `files`
+--
+
+DROP TABLE IF EXISTS `files`;
+CREATE TABLE `files` (
+  `fid` int(10) unsigned NOT NULL default '0',
+  `nid` int(10) unsigned NOT NULL default '0',
+  `filename` varchar(255) NOT NULL default '',
+  `filepath` varchar(255) NOT NULL default '',
+  `filemime` varchar(255) NOT NULL default '',
+  `filesize` int(10) unsigned NOT NULL default '0',
+  `list` tinyint(1) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`fid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `filter_formats`
+--
+
+DROP TABLE IF EXISTS `filter_formats`;
+CREATE TABLE `filter_formats` (
+  `format` int(4) NOT NULL auto_increment,
+  `name` varchar(255) NOT NULL default '',
+  `roles` varchar(255) NOT NULL default '',
+  `cache` tinyint(2) NOT NULL default '0',
+  PRIMARY KEY  (`format`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `filters`
+--
+
+DROP TABLE IF EXISTS `filters`;
+CREATE TABLE `filters` (
+  `format` int(4) NOT NULL default '0',
+  `module` varchar(64) NOT NULL default '',
+  `delta` tinyint(2) NOT NULL default '0',
+  `weight` tinyint(2) NOT NULL default '0',
+  KEY `weight` (`weight`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `flexinode_data`
+--
+
+DROP TABLE IF EXISTS `flexinode_data`;
+CREATE TABLE `flexinode_data` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `field_id` int(10) unsigned NOT NULL default '0',
+  `textual_data` mediumtext NOT NULL,
+  `numeric_data` int(10) unsigned NOT NULL default '0',
+  `serialized_data` mediumtext NOT NULL,
+  PRIMARY KEY  (`nid`,`field_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `flexinode_field`
+--
+
+DROP TABLE IF EXISTS `flexinode_field`;
+CREATE TABLE `flexinode_field` (
+  `field_id` int(10) unsigned NOT NULL default '0',
+  `ctype_id` int(10) unsigned NOT NULL default '0',
+  `label` varchar(255) NOT NULL default '',
+  `default_value` mediumtext NOT NULL,
+  `weight` int(10) NOT NULL default '0',
+  `required` int(1) NOT NULL default '0',
+  `show_teaser` int(1) NOT NULL default '0',
+  `show_table` int(1) NOT NULL default '0',
+  `rows` int(10) unsigned NOT NULL default '0',
+  `field_type` varchar(255) NOT NULL default '',
+  `options` text NOT NULL,
+  `description` varchar(255) NOT NULL default '',
+  PRIMARY KEY  (`field_id`),
+  KEY `ctype_id` (`ctype_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `flexinode_type`
+--
+
+DROP TABLE IF EXISTS `flexinode_type`;
+CREATE TABLE `flexinode_type` (
+  `ctype_id` int(10) unsigned NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `help` text NOT NULL,
+  PRIMARY KEY  (`ctype_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `flood`
+--
+
+DROP TABLE IF EXISTS `flood`;
+CREATE TABLE `flood` (
+  `event` varchar(64) NOT NULL default '',
+  `hostname` varchar(128) NOT NULL default '',
+  `timestamp` int(11) NOT NULL default '0'
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `form_fields`
+--
+
+DROP TABLE IF EXISTS `form_fields`;
+CREATE TABLE `form_fields` (
+  `ffid` int(10) unsigned NOT NULL default '0',
+  `fid` int(10) unsigned NOT NULL default '0',
+  `title` varchar(255) default NULL,
+  `explanation` text,
+  `page` varchar(255) default NULL,
+  `type` varchar(128) default NULL,
+  `weight` tinyint(1) NOT NULL default '0',
+  `required` tinyint(1) NOT NULL default '0',
+  `flags` text,
+  `validation` text,
+  `options` text,
+  `multiple` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY  (`ffid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `forms`
+--
+
+DROP TABLE IF EXISTS `forms`;
+CREATE TABLE `forms` (
+  `fid` int(10) unsigned NOT NULL default '0',
+  `type` varchar(16) NOT NULL default '',
+  `created` int(10) NOT NULL default '0',
+  PRIMARY KEY  (`fid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `forum`
+--
+
+DROP TABLE IF EXISTS `forum`;
+CREATE TABLE `forum` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `tid` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`nid`),
+  KEY `tid` (`tid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `friends_contributors`
+--
+
+DROP TABLE IF EXISTS `friends_contributors`;
+CREATE TABLE `friends_contributors` (
+  `id` int(10) NOT NULL auto_increment,
+  `amount` int(10) NOT NULL default '0',
+  `date` int(11) NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  `link` varchar(255) NOT NULL default '',
+  `title` varchar(255) NOT NULL default '',
+  `note` varchar(255) NOT NULL default '',
+  `email` varchar(255) NOT NULL default '',
+  PRIMARY KEY  (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `history`
+--
+
+DROP TABLE IF EXISTS `history`;
+CREATE TABLE `history` (
+  `uid` int(10) NOT NULL default '0',
+  `nid` int(10) NOT NULL default '0',
+  `timestamp` int(11) NOT NULL default '0',
+  PRIMARY KEY  (`uid`,`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `htmlarea`
+--
+
+DROP TABLE IF EXISTS `htmlarea`;
+CREATE TABLE `htmlarea` (
+  `textarea` varchar(255) NOT NULL default '',
+  `status` tinyint(4) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`textarea`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `ia`
+--
+
+DROP TABLE IF EXISTS `ia`;
+CREATE TABLE `ia` (
+  `nid` int(11) unsigned NOT NULL default '0',
+  `ia_identifier` varchar(255) NOT NULL default '',
+  `status` int(2) NOT NULL default '0',
+  `contributor` varchar(255) default NULL,
+  PRIMARY KEY  (`ia_identifier`),
+  UNIQUE KEY `nid` (`nid`),
+  KEY `status` (`status`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `image`
+--
+
+DROP TABLE IF EXISTS `image`;
+CREATE TABLE `image` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `image_path` varchar(255) NOT NULL default '',
+  `thumb_path` varchar(255) NOT NULL default '',
+  `preview_path` varchar(255) NOT NULL default '',
+  `image_list` longtext,
+  `format` varchar(255) NOT NULL default '',
+  `width` int(10) unsigned NOT NULL default '0',
+  `height` int(10) unsigned NOT NULL default '0',
+  `filesize` int(10) unsigned NOT NULL default '0',
+  `iptc` text,
+  `exif` text,
+  `personal` tinyint(4) NOT NULL default '0',
+  `weight` tinyint(4) NOT NULL default '0',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `imagemedia`
+--
+
+DROP TABLE IF EXISTS `imagemedia`;
+CREATE TABLE `imagemedia` (
+  `nid` int(10) NOT NULL default '0',
+  `image_fileid` int(10) default NULL,
+  `file_size` varchar(255) default NULL,
+  `image_resolution` varchar(255) default NULL,
+  `image_gps_coordinates` varchar(255) default NULL,
+  `image_film_type` varchar(255) default NULL,
+  `camera_model` varchar(255) default NULL,
+  `image_bit_depth` varchar(255) default NULL,
+  `image_school` varchar(255) default NULL,
+  `image_medium` varchar(255) default NULL,
+  `camera_aperture` varchar(255) default NULL,
+  `camera_shutter_speed` varchar(255) default NULL,
+  `camera_iso_equivalent` varchar(255) default NULL,
+  `camera_focal_length` varchar(255) default NULL,
+  `image_is_digital` tinyint(1) default '0',
+  `image_flash_used` tinyint(1) default '0',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `locales_meta`
+--
+
+DROP TABLE IF EXISTS `locales_meta`;
+CREATE TABLE `locales_meta` (
+  `locale` varchar(12) NOT NULL default '',
+  `name` varchar(64) NOT NULL default '',
+  `enabled` int(2) NOT NULL default '0',
+  `isdefault` int(2) NOT NULL default '0',
+  `plurals` int(1) NOT NULL default '0',
+  `formula` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`locale`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `locales_source`
+--
+
+DROP TABLE IF EXISTS `locales_source`;
+CREATE TABLE `locales_source` (
+  `lid` int(11) NOT NULL auto_increment,
+  `location` varchar(255) NOT NULL default '',
+  `source` blob NOT NULL,
+  PRIMARY KEY  (`lid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `locales_target`
+--
+
+DROP TABLE IF EXISTS `locales_target`;
+CREATE TABLE `locales_target` (
+  `lid` int(11) NOT NULL default '0',
+  `translation` blob NOT NULL,
+  `locale` varchar(12) NOT NULL default '',
+  `plid` int(11) NOT NULL default '0',
+  `plural` int(1) NOT NULL default '0',
+  KEY `lid` (`lid`),
+  KEY `lang` (`locale`),
+  KEY `plid` (`plid`),
+  KEY `plural` (`plural`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `menu`
+--
+
+DROP TABLE IF EXISTS `menu`;
+CREATE TABLE `menu` (
+  `mid` int(10) unsigned NOT NULL default '0',
+  `pid` int(10) unsigned NOT NULL default '0',
+  `path` varchar(255) NOT NULL default '',
+  `title` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `weight` tinyint(4) NOT NULL default '0',
+  `type` int(2) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`mid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `metadata_data`
+--
+
+DROP TABLE IF EXISTS `metadata_data`;
+CREATE TABLE `metadata_data` (
+  `data_id` int(11) NOT NULL auto_increment,
+  `nid` int(11) NOT NULL default '0',
+  `type` varchar(255) NOT NULL default '',
+  `value` mediumtext NOT NULL,
+  PRIMARY KEY  (`data_id`),
+  KEY `type` (`type`),
+  KEY `nid` (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `moderation_filters`
+--
+
+DROP TABLE IF EXISTS `moderation_filters`;
+CREATE TABLE `moderation_filters` (
+  `fid` int(10) unsigned NOT NULL auto_increment,
+  `filter` varchar(255) NOT NULL default '',
+  `minimum` smallint(6) NOT NULL default '0',
+  PRIMARY KEY  (`fid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `moderation_roles`
+--
+
+DROP TABLE IF EXISTS `moderation_roles`;
+CREATE TABLE `moderation_roles` (
+  `rid` int(10) unsigned NOT NULL default '0',
+  `mid` int(10) unsigned NOT NULL default '0',
+  `value` tinyint(4) NOT NULL default '0',
+  KEY `idx_rid` (`rid`),
+  KEY `idx_mid` (`mid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `moderation_votes`
+--
+
+DROP TABLE IF EXISTS `moderation_votes`;
+CREATE TABLE `moderation_votes` (
+  `mid` int(10) unsigned NOT NULL auto_increment,
+  `vote` varchar(255) default NULL,
+  `weight` tinyint(4) NOT NULL default '0',
+  PRIMARY KEY  (`mid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node`
+--
+
+DROP TABLE IF EXISTS `node`;
+CREATE TABLE `node` (
+  `nid` int(10) unsigned NOT NULL auto_increment,
+  `type` varchar(16) NOT NULL default '',
+  `title` varchar(128) NOT NULL default '',
+  `uid` int(10) NOT NULL default '0',
+  `status` int(4) NOT NULL default '1',
+  `created` int(11) NOT NULL default '0',
+  `changed` int(11) NOT NULL default '0',
+  `comment` int(2) NOT NULL default '0',
+  `promote` int(2) NOT NULL default '0',
+  `moderate` int(2) NOT NULL default '0',
+  `teaser` longtext NOT NULL,
+  `body` longtext NOT NULL,
+  `revisions` longtext NOT NULL,
+  `sticky` int(2) NOT NULL default '0',
+  `format` int(4) NOT NULL default '0',
+  PRIMARY KEY  (`nid`),
+  KEY `node_type` (`type`(4)),
+  KEY `node_title_type` (`title`,`type`(4)),
+  KEY `status` (`status`),
+  KEY `uid` (`uid`),
+  KEY `node_moderate` (`moderate`),
+  KEY `node_promote_status` (`promote`,`status`),
+  KEY `node_created` (`created`),
+  KEY `node_changed` (`changed`),
+  KEY `node_status_type` (`status`,`type`,`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_access`
+--
+
+DROP TABLE IF EXISTS `node_access`;
+CREATE TABLE `node_access` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `gid` int(10) unsigned NOT NULL default '0',
+  `realm` varchar(255) NOT NULL default '',
+  `grant_view` tinyint(1) unsigned NOT NULL default '0',
+  `grant_update` tinyint(1) unsigned NOT NULL default '0',
+  `grant_delete` tinyint(1) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`nid`,`gid`,`realm`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_comment_statistics`
+--
+
+DROP TABLE IF EXISTS `node_comment_statistics`;
+CREATE TABLE `node_comment_statistics` (
+  `nid` int(10) unsigned NOT NULL auto_increment,
+  `last_comment_timestamp` int(11) NOT NULL default '0',
+  `last_comment_name` varchar(60) default NULL,
+  `last_comment_uid` int(10) NOT NULL default '0',
+  `comment_count` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`nid`),
+  KEY `node_comment_timestamp` (`last_comment_timestamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `node_counter`
+--
+
+DROP TABLE IF EXISTS `node_counter`;
+CREATE TABLE `node_counter` (
+  `nid` int(11) NOT NULL default '0',
+  `totalcount` bigint(20) unsigned NOT NULL default '0',
+  `daycount` mediumint(8) unsigned NOT NULL default '0',
+  `timestamp` int(11) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`nid`),
+  KEY `totalcount` (`totalcount`),
+  KEY `daycount` (`daycount`),
+  KEY `timestamp` (`timestamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `og`
+--
+
+DROP TABLE IF EXISTS `og`;
+CREATE TABLE `og` (
+  `nid` int(11) NOT NULL default '0',
+  `selective` int(11) NOT NULL default '0',
+  `description` varchar(255) default NULL,
+  `image` varchar(255) default NULL,
+  `theme` varchar(255) default NULL,
+  `directory` int(11) NOT NULL default '1',
+  `register` int(1) NOT NULL default '0',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `og_uid`
+--
+
+DROP TABLE IF EXISTS `og_uid`;
+CREATE TABLE `og_uid` (
+  `nid` int(11) NOT NULL default '0',
+  `uid` int(11) NOT NULL default '0',
+  `mail_type` int(11) default NULL,
+  PRIMARY KEY  (`nid`,`uid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `paypal_email`
+--
+
+DROP TABLE IF EXISTS `paypal_email`;
+CREATE TABLE `paypal_email` (
+  `payer_id` varchar(20) default NULL,
+  `payer_email` varchar(48) default NULL
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `paypal_log`
+--
+
+DROP TABLE IF EXISTS `paypal_log`;
+CREATE TABLE `paypal_log` (
+  `txn_id` varchar(25) NOT NULL default '',
+  `parent_txn_id` varchar(25) default NULL,
+  `payment_date` varchar(26) default NULL,
+  `txn_type` varchar(25) default NULL,
+  `business` varchar(48) default NULL,
+  `receiver_id` varchar(20) default NULL,
+  `receiver_email` varchar(48) default NULL,
+  `payer_id` varchar(20) default NULL,
+  `payer_email` varchar(48) default NULL,
+  `option_name1` varchar(60) default NULL,
+  `option_selection1` text,
+  `option_name2` varchar(60) default NULL,
+  `option_selection2` text,
+  `item_name` varchar(128) default NULL,
+  `mc_currency` varchar(4) default 'USD',
+  `payment_type` decimal(11,2) default NULL,
+  `payment_gross` decimal(11,2) default NULL,
+  `payment_fee` decimal(11,2) default NULL,
+  `mc_gross` decimal(11,2) default NULL,
+  `mc_fee` decimal(11,2) default NULL,
+  `tax` decimal(11,2) default NULL,
+  `item_number` varchar(60) default NULL,
+  `quantity` int(3) default NULL,
+  `payment_status` varchar(12) default NULL,
+  `reason_code` varchar(12) default NULL,
+  `memo` text,
+  `verify_sign` text,
+  `notify_version` varchar(4) default NULL,
+  `transaction_date` timestamp NOT NULL default CURRENT_TIMESTAMP,
+  PRIMARY KEY  (`txn_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `paypal_payer`
+--
+
+DROP TABLE IF EXISTS `paypal_payer`;
+CREATE TABLE `paypal_payer` (
+  `payer_id` varchar(20) NOT NULL default '',
+  `first_name` varchar(32) default NULL,
+  `last_name` varchar(32) default NULL,
+  `address_street` varchar(48) default NULL,
+  `address_city` varchar(32) default NULL,
+  `address_zip` varchar(10) default NULL,
+  `address_country` varchar(32) default NULL,
+  `address_status` varchar(11) default 'unverified',
+  `payer_status` varchar(32) default 'unverified',
+  PRIMARY KEY  (`payer_id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `paypal_queue`
+--
+
+DROP TABLE IF EXISTS `paypal_queue`;
+CREATE TABLE `paypal_queue` (
+  `log` int(11) NOT NULL auto_increment,
+  `value` text,
+  `added` timestamp NOT NULL default CURRENT_TIMESTAMP,
+  PRIMARY KEY  (`log`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `permission`
+--
+
+DROP TABLE IF EXISTS `permission`;
+CREATE TABLE `permission` (
+  `rid` int(10) unsigned NOT NULL default '0',
+  `perm` longtext,
+  `tid` int(10) unsigned NOT NULL default '0',
+  KEY `rid` (`rid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `poll`
+--
+
+DROP TABLE IF EXISTS `poll`;
+CREATE TABLE `poll` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `runtime` int(10) NOT NULL default '0',
+  `polled` longtext,
+  `active` int(2) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `poll_choices`
+--
+
+DROP TABLE IF EXISTS `poll_choices`;
+CREATE TABLE `poll_choices` (
+  `chid` int(10) unsigned NOT NULL auto_increment,
+  `nid` int(10) unsigned NOT NULL default '0',
+  `chtext` varchar(128) NOT NULL default '',
+  `chvotes` int(6) NOT NULL default '0',
+  `chorder` int(2) NOT NULL default '0',
+  PRIMARY KEY  (`chid`),
+  KEY `nid` (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `privatemsg`
+--
+
+DROP TABLE IF EXISTS `privatemsg`;
+CREATE TABLE `privatemsg` (
+  `id` int(10) unsigned NOT NULL auto_increment,
+  `author` int(10) unsigned NOT NULL default '0',
+  `recipient` int(10) unsigned NOT NULL default '0',
+  `subject` varchar(64) NOT NULL default '',
+  `message` text,
+  `timestamp` int(11) unsigned NOT NULL default '0',
+  `new` tinyint(3) unsigned NOT NULL default '0',
+  `hostname` varchar(255) NOT NULL default '',
+  `folder` int(10) unsigned NOT NULL default '0',
+  `author_del` tinyint(3) unsigned NOT NULL default '0',
+  `recipient_del` tinyint(3) unsigned NOT NULL default '0',
+  `format` varchar(40) default NULL,
+  PRIMARY KEY  (`id`),
+  KEY `recipient` (`recipient`),
+  KEY `folder` (`folder`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `privatemsg_archive`
+--
+
+DROP TABLE IF EXISTS `privatemsg_archive`;
+CREATE TABLE `privatemsg_archive` (
+  `id` int(10) unsigned NOT NULL auto_increment,
+  `author` int(10) unsigned NOT NULL default '0',
+  `recipient` int(10) unsigned NOT NULL default '0',
+  `subject` varchar(64) NOT NULL default '',
+  `message` text NOT NULL,
+  `timestamp` int(11) unsigned NOT NULL default '0',
+  `hostname` varchar(255) NOT NULL default '',
+  `folder` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`id`),
+  KEY `recipient` (`recipient`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `privatemsg_folder`
+--
+
+DROP TABLE IF EXISTS `privatemsg_folder`;
+CREATE TABLE `privatemsg_folder` (
+  `fid` int(10) unsigned NOT NULL auto_increment,
+  `uid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  PRIMARY KEY  (`fid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `profile_fields`
+--
+
+DROP TABLE IF EXISTS `profile_fields`;
+CREATE TABLE `profile_fields` (
+  `fid` int(10) NOT NULL auto_increment,
+  `title` varchar(255) default NULL,
+  `name` varchar(128) default NULL,
+  `explanation` text,
+  `category` varchar(255) default NULL,
+  `page` varchar(255) default NULL,
+  `type` varchar(128) default NULL,
+  `weight` tinyint(1) NOT NULL default '0',
+  `required` tinyint(1) NOT NULL default '0',
+  `register` tinyint(1) NOT NULL default '0',
+  `visibility` tinyint(1) NOT NULL default '0',
+  `options` text,
+  PRIMARY KEY  (`fid`),
+  UNIQUE KEY `name` (`name`),
+  KEY `category` (`category`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `profile_values`
+--
+
+DROP TABLE IF EXISTS `profile_values`;
+CREATE TABLE `profile_values` (
+  `fid` int(11) unsigned default '0',
+  `uid` int(11) unsigned default '0',
+  `value` text,
+  KEY `uid` (`uid`),
+  KEY `fid` (`fid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `queue`
+--
+
+DROP TABLE IF EXISTS `queue`;
+CREATE TABLE `queue` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `uid` int(10) unsigned NOT NULL default '0',
+  `vote` int(3) NOT NULL default '0',
+  PRIMARY KEY  (`nid`,`uid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `quotes`
+--
+
+DROP TABLE IF EXISTS `quotes`;
+CREATE TABLE `quotes` (
+  `nid` int(11) NOT NULL default '0',
+  `author` varchar(255) NOT NULL default '',
+  `promote` int(11) NOT NULL default '0',
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `quotes_blocks`
+--
+
+DROP TABLE IF EXISTS `quotes_blocks`;
+CREATE TABLE `quotes_blocks` (
+  `bid` int(11) NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  `title` varchar(255) NOT NULL default '',
+  `nid_filter` text NOT NULL,
+  `rid_filter` text NOT NULL,
+  `uid_filter` text NOT NULL,
+  `tid_filter` text NOT NULL,
+  PRIMARY KEY  (`bid`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `role`
+--
+
+DROP TABLE IF EXISTS `role`;
+CREATE TABLE `role` (
+  `rid` int(10) unsigned NOT NULL auto_increment,
+  `name` varchar(32) NOT NULL default '',
+  PRIMARY KEY  (`rid`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `search_index`
+--
+
+DROP TABLE IF EXISTS `search_index`;
+CREATE TABLE `search_index` (
+  `word` varchar(50) NOT NULL default '',
+  `sid` int(10) unsigned NOT NULL default '0',
+  `type` varchar(16) default NULL,
+  `fromsid` int(10) unsigned NOT NULL default '0',
+  `fromtype` varchar(16) default NULL,
+  `score` int(10) unsigned default NULL,
+  KEY `sid` (`sid`),
+  KEY `fromsid` (`fromsid`),
+  KEY `word` (`word`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `search_total`
+--
+
+DROP TABLE IF EXISTS `search_total`;
+CREATE TABLE `search_total` (
+  `word` varchar(50) NOT NULL default '',
+  `count` int(10) unsigned default NULL,
+  PRIMARY KEY  (`word`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `sequences`
+--
+
+DROP TABLE IF EXISTS `sequences`;
+CREATE TABLE `sequences` (
+  `name` varchar(255) NOT NULL default '',
+  `id` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `sessions`
+--
+
+DROP TABLE IF EXISTS `sessions`;
+CREATE TABLE `sessions` (
+  `uid` int(10) unsigned NOT NULL default '0',
+  `sid` varchar(32) NOT NULL default '',
+  `hostname` varchar(128) NOT NULL default '',
+  `timestamp` int(11) NOT NULL default '0',
+  `session` longtext,
+  KEY `uid` (`uid`),
+  KEY `sid` (`sid`),
+  KEY `timestamp` (`timestamp`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `smileys`
+--
+
+DROP TABLE IF EXISTS `smileys`;
+CREATE TABLE `smileys` (
+  `id` int(11) NOT NULL auto_increment,
+  `acronyms` varchar(255) NOT NULL default '',
+  `image` varchar(255) NOT NULL default '',
+  `description` varchar(64) NOT NULL default '',
+  `standalone` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY  (`id`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `subscriptions`
+--
+
+DROP TABLE IF EXISTS `subscriptions`;
+CREATE TABLE `subscriptions` (
+  `sid` int(10) unsigned NOT NULL default '0',
+  `uid` int(10) unsigned NOT NULL default '0',
+  `stype` varchar(4) NOT NULL default ''
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `survey`
+--
+
+DROP TABLE IF EXISTS `survey`;
+CREATE TABLE `survey` (
+  `nid` int(11) unsigned NOT NULL default '0',
+  `fid` int(11) NOT NULL default '0',
+  `email` text,
+  `result_page` text,
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `survey_fields`
+--
+
+DROP TABLE IF EXISTS `survey_fields`;
+CREATE TABLE `survey_fields` (
+  `rid` int(11) unsigned NOT NULL default '0',
+  `ffid` int(11) NOT NULL default '0',
+  `value` text,
+  PRIMARY KEY  (`rid`,`ffid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `survey_responses`
+--
+
+DROP TABLE IF EXISTS `survey_responses`;
+CREATE TABLE `survey_responses` (
+  `rid` int(11) unsigned NOT NULL default '0',
+  `nid` int(11) unsigned NOT NULL default '0',
+  `uid` int(11) unsigned NOT NULL default '0',
+  `created` int(11) NOT NULL default '0',
+  PRIMARY KEY  (`rid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `system`
+--
+
+DROP TABLE IF EXISTS `system`;
+CREATE TABLE `system` (
+  `filename` varchar(255) NOT NULL default '',
+  `name` varchar(255) NOT NULL default '',
+  `type` varchar(255) NOT NULL default '',
+  `description` varchar(255) NOT NULL default '',
+  `status` int(2) NOT NULL default '0',
+  `throttle` tinyint(1) NOT NULL default '0',
+  `bootstrap` int(2) NOT NULL default '0',
+  PRIMARY KEY  (`filename`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `term_data`
+--
+
+DROP TABLE IF EXISTS `term_data`;
+CREATE TABLE `term_data` (
+  `tid` int(10) unsigned NOT NULL auto_increment,
+  `vid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  `description` longtext,
+  `weight` tinyint(4) NOT NULL default '0',
+  PRIMARY KEY  (`tid`),
+  KEY `vid` (`vid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `term_hierarchy`
+--
+
+DROP TABLE IF EXISTS `term_hierarchy`;
+CREATE TABLE `term_hierarchy` (
+  `tid` int(10) unsigned NOT NULL default '0',
+  `parent` int(10) unsigned NOT NULL default '0',
+  KEY `tid` (`tid`),
+  KEY `parent` (`parent`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `term_node`
+--
+
+DROP TABLE IF EXISTS `term_node`;
+CREATE TABLE `term_node` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `tid` int(10) unsigned NOT NULL default '0',
+  KEY `nid` (`nid`),
+  KEY `tid` (`tid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `term_relation`
+--
+
+DROP TABLE IF EXISTS `term_relation`;
+CREATE TABLE `term_relation` (
+  `tid1` int(10) unsigned NOT NULL default '0',
+  `tid2` int(10) unsigned NOT NULL default '0',
+  KEY `tid1` (`tid1`),
+  KEY `tid2` (`tid2`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `term_synonym`
+--
+
+DROP TABLE IF EXISTS `term_synonym`;
+CREATE TABLE `term_synonym` (
+  `tid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(255) NOT NULL default '',
+  KEY `tid` (`tid`),
+  KEY `name` (`name`(3))
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `text`
+--
+
+DROP TABLE IF EXISTS `text`;
+CREATE TABLE `text` (
+  `nid` int(10) NOT NULL default '0',
+  `text_fileid` int(10) default NULL,
+  `photo_fileid` int(10) default NULL,
+  `photo_credit` varchar(255) default NULL,
+  `file_size` varchar(255) default NULL,
+  `textformat` varchar(255) default NULL,
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `trackback_received`
+--
+
+DROP TABLE IF EXISTS `trackback_received`;
+CREATE TABLE `trackback_received` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `cid` int(10) unsigned NOT NULL default '0',
+  `url` varchar(255) NOT NULL default '',
+  PRIMARY KEY  (`nid`,`cid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `trackback_sent`
+--
+
+DROP TABLE IF EXISTS `trackback_sent`;
+CREATE TABLE `trackback_sent` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `url` varchar(255) NOT NULL default '',
+  `successful` tinyint(1) NOT NULL default '0',
+  PRIMARY KEY  (`nid`,`url`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `url_alias`
+--
+
+DROP TABLE IF EXISTS `url_alias`;
+CREATE TABLE `url_alias` (
+  `pid` int(10) unsigned NOT NULL auto_increment,
+  `src` varchar(128) NOT NULL default '',
+  `dst` varchar(128) NOT NULL default '',
+  PRIMARY KEY  (`pid`),
+  UNIQUE KEY `dst` (`dst`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `users`
+--
+
+DROP TABLE IF EXISTS `users`;
+CREATE TABLE `users` (
+  `uid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(60) NOT NULL default '',
+  `pass` varchar(32) NOT NULL default '',
+  `mail` varchar(64) default '',
+  `mode` tinyint(1) NOT NULL default '0',
+  `sort` tinyint(1) default '0',
+  `threshold` tinyint(1) default '0',
+  `theme` varchar(255) NOT NULL default '',
+  `signature` varchar(255) NOT NULL default '',
+  `created` int(11) NOT NULL default '0',
+  `changed` int(11) NOT NULL default '0',
+  `status` tinyint(4) NOT NULL default '0',
+  `timezone` varchar(8) default NULL,
+  `language` varchar(12) NOT NULL default '',
+  `picture` varchar(255) NOT NULL default '',
+  `init` varchar(64) default '',
+  `data` longtext,
+  PRIMARY KEY  (`uid`),
+  UNIQUE KEY `name` (`name`),
+  KEY `changed` (`changed`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `users_roles`
+--
+
+DROP TABLE IF EXISTS `users_roles`;
+CREATE TABLE `users_roles` (
+  `uid` int(10) unsigned NOT NULL default '0',
+  `rid` int(10) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`uid`,`rid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `variable`
+--
+
+DROP TABLE IF EXISTS `variable`;
+CREATE TABLE `variable` (
+  `name` varchar(48) NOT NULL default '',
+  `value` longtext NOT NULL,
+  PRIMARY KEY  (`name`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `video`
+--
+
+DROP TABLE IF EXISTS `video`;
+CREATE TABLE `video` (
+  `nid` int(10) NOT NULL default '0',
+  `video_fileid` int(10) default NULL,
+  `quicktime_controller` tinyint(1) NOT NULL default '0',
+  `quicktime_loop` tinyint(1) NOT NULL default '0',
+  `quicktime_autoplay` tinyint(1) NOT NULL default '0',
+  `photo_fileid` int(10) default NULL,
+  `photo_credit` varchar(255) default NULL,
+  `file_size` varchar(255) default NULL,
+  `length` varchar(255) default NULL,
+  `videoformat` varchar(255) default NULL,
+  `framerate` varchar(255) default NULL,
+  PRIMARY KEY  (`nid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `vocabulary`
+--
+
+DROP TABLE IF EXISTS `vocabulary`;
+CREATE TABLE `vocabulary` (
+  `vid` int(10) unsigned NOT NULL auto_increment,
+  `name` varchar(255) NOT NULL default '',
+  `description` longtext,
+  `help` varchar(255) NOT NULL default '',
+  `relations` tinyint(3) unsigned NOT NULL default '0',
+  `hierarchy` tinyint(3) unsigned NOT NULL default '0',
+  `multiple` tinyint(3) unsigned NOT NULL default '0',
+  `required` tinyint(3) unsigned NOT NULL default '0',
+  `weight` tinyint(4) NOT NULL default '0',
+  `module` varchar(255) NOT NULL default '',
+  PRIMARY KEY  (`vid`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `vocabulary_node_types`
+--
+
+DROP TABLE IF EXISTS `vocabulary_node_types`;
+CREATE TABLE `vocabulary_node_types` (
+  `vid` int(10) NOT NULL default '0',
+  `type` varchar(16) NOT NULL default '',
+  PRIMARY KEY  (`vid`,`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `watchdog`
+--
+
+DROP TABLE IF EXISTS `watchdog`;
+CREATE TABLE `watchdog` (
+  `wid` int(5) NOT NULL auto_increment,
+  `uid` int(10) NOT NULL default '0',
+  `type` varchar(16) NOT NULL default '',
+  `message` longtext NOT NULL,
+  `link` varchar(255) NOT NULL default '',
+  `location` varchar(128) NOT NULL default '',
+  `hostname` varchar(128) NOT NULL default '',
+  `timestamp` int(11) NOT NULL default '0',
+  `severity` tinyint(3) unsigned NOT NULL default '0',
+  PRIMARY KEY  (`wid`),
+  KEY `type` (`type`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+--
+-- Table structure for table `weblink`
+--
+
+DROP TABLE IF EXISTS `weblink`;
+CREATE TABLE `weblink` (
+  `nid` int(10) unsigned default '0',
+  `weblink` varchar(128) default NULL,
+  `click` int(10) unsigned default '0',
+  `monitor` int(1) NOT NULL default '0',
+  `size` text NOT NULL,
+  `change_stamp` int(11) NOT NULL default '0',
+  `checked` int(11) NOT NULL default '0',
+  `feed` varchar(255) NOT NULL default '',
+  `refresh` int(11) NOT NULL default '0',
+  `threshold` int(11) NOT NULL default '0',
+  `spider_site` int(1) NOT NULL default '0',
+  `spider_url` varchar(255) NOT NULL default '',
+  KEY `nid` (`nid`),
+  KEY `url` (`weblink`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+
+/*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
+/*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
+/*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
+/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
+/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
+/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+/*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
+

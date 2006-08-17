@@ -1,0 +1,86 @@
+REQUIREMENTS
+------------
+
+The copyright module requires a standard Drupal installation (drupal.org).
+
+OPTIONAL COMPONENTS
+-------------------
+
+- To use book-level copyright management the book module must be enabled
+  on your Drupal site.
+
+INSTALLATION
+------------
+
+1. DOWNLOAD MODULE
+
+   You can obtain the latest release from http://drupal.org/.
+   Download and extract the files (replace x.x.x with version number):
+
+     $ wget http://drupal.org/project/copyright/copyright-x.x.x.tar.gz
+     $ tar -zxvf copyright-x.x.x.tar.gz
+
+   This will create a new directory copyright-x.x.x.  cd into this
+   directory.
+
+2. UPDATE THE DRUPAL DATABASE
+
+   These instructions are for MySQL. Execute the script as a user who's
+   permitted to create tables in your Drupal database (usually the user
+   account used to run Drupal).  Example:
+
+     $ mysql -u [uid] [drupal_database] < copyright.mysql
+
+4. INSTALL MODULE
+
+     $ cp copyright.module /[drupalpath]/modules
+
+5. CONFIGURE MODULE
+
+   Log into your Drupal site.  Go to the administer/modules page and
+   select the copyright module as enabled.  Save the configuration.
+   
+   Go to the administer/copyright page.  Set site-wide settings
+   and edit/create copyrights/licenses as desired.
+   
+   Optionally go to the administer/blocks page and enable the copyright
+   block.  It's suggested to either enable the block or turn on the footer
+   message, but not both.  Only one copyright notice should be displayed.
+
+CUSTOMIZING YOUR THEME(S) - OPTIONAL
+------------------------------------
+
+The copyright module adds two new theme hooks:
+- theme_copyright_footer - displayed as node and/or site footer
+- theme_copyright_block - for the inner text of the copyright block
+
+Use of these hooks is not required.  If you don't modify your theme 
+to have these hooks a default layout will be used for copyright notices.
+These hook functions can be customized within themes in the standard way.
+Create themename_copyright_footer and/or themename_copyright_block and they
+will be used automatically.  Example, for the goofy.theme file you might
+want to add:
+
+function goofy_copyright_footer($notice)
+{
+  return '<div style="margin:4pt;font-size:smaller;font-weight:lighter">' . $notice . '</div>';
+}
+function goofy_copyright_block($notice)
+{
+  return '<div style="text-align:center">' . $notice . '</div>';
+}
+
+For theme engines check their documentation on how to use these "custom"
+hooks.
+
+UPGRADING
+---------
+
+Simply overwrite the existing modules/copyright.module with the new one.
+No database changes have been made.
+
+MORE INFORMATION
+----------------
+
+Please go to http://drupal.org/project/copyright for support forums,
+reporting bugs, downloading the latest version, etc.

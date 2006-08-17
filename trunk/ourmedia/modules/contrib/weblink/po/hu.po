@@ -1,0 +1,521 @@
+# Hungarian translation of Drupal weblink.module
+# Copyright Weblabor Team <info [at] weblabor.hu>
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: 1.60\n"
+"POT-Creation-Date: 2004-03-06 16:32+0100\n"
+"PO-Revision-Date: 20043-03-06 17:00+0100\n"
+"Last-Translator: Weblabor Team <info [at] weblabor.hu>\n"
+"Language-Team: hu\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+
+#: weblink.module:11
+msgid ""
+"<p>The weblinks module is used to create links to other websites or pages.</"
+"p>\n"
+"<p>The weblink monitor tracks or crawls other interesting web sites and "
+"displays their latest modification dates. Vistors to the host site learn "
+"about relevant sites and can easily see if there is new content. Here is how "
+"it works:</p>\n"
+"<ul>\n"
+" <li>The site administrator selects certain weblinks for monitoring from the "
+"administration page.</li>\n"
+" <li>Drupal's cron function triggers the weblink module to check all the "
+"monitored web sites for recent changes or updates. A page is updated when "
+"there is a <em>x</em>-byte difference since the last time it was checked, "
+"where <em>x</em> is a configuration option.</li>\n"
+" <li>The module exports both a page and a block that displays the registered "
+"sites ordered by their last modification date.</li>\n"
+"</ul>"
+msgstr ""
+"<p>A weblink modullal más webhelyekre vagy weboldalakra mutató linkeket "
+"hozhatsz létre és tarthatsz nyilván.</p>\n"
+"<p>A weblink monitor segítéségével megfigyelhetsz egyes weboldalakat, "
+"kinyerve a legfrissebb módosítási dátumukat. A weblink modult használó "
+"webhely látogatói így gyors áttekintést kaphatnak a legutóbb frissült "
+"kapcsolódó oldalakról. A megfigyelés a következőképpen működik:</p>\n"
+"<ul>\n"
+" <li>Az erre jogosult adminisztrátorok kijelölik a megfigyelésre érdemes "
+"webhelyeket.</li>\n"
+" <li>A Drupal cron szolgáltatása segítségével a weblink modul letölti a "
+"megjelölt webhelyeket, és eldönti, hogy történt-e az oldalakon változás. Egy "
+"oldal akkor tekinthető megváltozottnak, ha <em>x</em>-byte különbség "
+"mutatkozik az oldal méretében a legutóbbi megfigyelés óta, ahol <em>x</em> "
+"egy beállítható mérték.</li>\n"
+" <li>A modul egy áttekintő oldalt és egy blokkot is biztosít a megfigyelt "
+"oldalakat legutóbbi módosításuk szerint időben visszamenőlegesen listázva.</"
+"li>\n"
+"</ul>"
+
+#: weblink.module:20
+msgid "A weblinks module with integrated monitoring"
+msgstr "Linkeket kezelő modul beépített megfigyelő funkcióval"
+
+#: weblink.module:23
+msgid "Weblinks allow you to link to other websites and pages."
+msgstr "A linkek más webhelyekre vagy weboldalakra mutató kapcsok."
+
+#: weblink.module:27
+msgid ""
+"You may link to webpages <a href=\"%long-tip\">through the weblinks "
+"registry</a>"
+msgstr ""
+"Elhelyezhetsz webhelyekre mutató kapcsolatokat a <a href=\"%long-tip\">linkek "
+"oldalon</a> kezelt hivatkozásokkal."
+
+#: weblink.module:31
+msgid ""
+"<p>You may create links to items stored in our weblink registry using a "
+"special syntax. The weblink codes will be replaced by a links to visit the "
+"real websites. Syntax: <code>[weblink:link_id]</code> or <code>[weblink:"
+"http://a.weblink.example.com/]</code>.</p>"
+msgstr ""
+"<p>A webhelyen nyilvántartott linkekre közvetlen kapcsolatokat építhetsz be "
+"a beküldött tartalomba a következő kódok használatával: <code>[weblink:linkszám]</code> "
+"vagy <code>[weblink:http://link.cime.com/]</code>"
+
+#: weblink.module:36
+msgid ""
+"<p>This page lists the monitored links. See the <a href=\"%weblink"
+"\">weblinks directory</a> for more external links.</p>"
+msgstr ""
+"<p>Ezen az oldalon a megfigyelt linkek találhatóak. Lásd a <a href=\"%weblink"
+"\">linkek teljes listáját</a> további hivatkozásokért.</p>"
+
+#: weblink.module:46 ;48;202;344;350;394;0
+msgid "weblink"
+msgstr "link"
+
+#: weblink.module:55
+msgid "add to bookmarks"
+msgstr "gyorslinkekhez adás"
+
+#: weblink.module:55
+msgid "Adds the destination to your bookmarks."
+msgstr "A link célpontját a kedvencekhez adja."
+
+#: weblink.module:60 ;63
+msgid "visit %link"
+msgstr "%link látogatása"
+
+#: weblink.module:66
+msgid "visit"
+msgstr "<strong>látogatás</strong>"
+
+#: weblink.module:85 ;88
+msgid "Navigation vocabulary"
+msgstr "Navigációs szótár"
+
+#: weblink.module:85
+msgid "The dedicated weblink vocabulary, which will be used by this module."
+msgstr "A linkek kategorizálását lehetővé tevő szótár."
+
+#: weblink.module:88
+msgid ""
+"At least one <a href=\"%url\">vocabulary</a> should be able to hold weblink "
+"nodes, being the navigation vocabulary for this module."
+msgstr ""
+"Legalább egy <a href=\"%url\">szótár</a> képes kell, hogy legyen weblink típusú "
+"tartalmi elemek befogadására, hogy a weblink modul navigációs szótára lehessen."
+
+#: weblink.module:91
+msgid "Vocabulary association"
+msgstr "Szótár kapcsolás"
+
+#: weblink.module:93
+msgid "Visit link display mode"
+msgstr "Link megjelenítési mód"
+
+#: weblink.module:93
+msgid "display as title"
+msgstr "a cím megjelenítése"
+
+#: weblink.module:93
+msgid "display as url"
+msgstr "az URL megjelenítése"
+
+#: weblink.module:93
+msgid "only display the 'visit' text"
+msgstr "csak a 'látogatás' szó megjelenítése"
+
+#: weblink.module:93
+msgid ""
+"Users are able to visit weblinks via the node links list. This setting "
+"toggles how the visit link is displayed, either containing the node title or "
+"the node target URL or just the word 'visit'"
+msgstr ""
+"A felhasználók a tartalmi elemek link listájában található kapoccsal tudják "
+"elérni a linkek tényleges célpontját. Ez a beállítás szabja meg, hogy ennek "
+"a linknek mi legyen a felirata"
+
+#: weblink.module:95
+msgid "Number of links per block"
+msgstr "A blokkokban megjelenő linkek száma"
+
+#: weblink.module:95
+msgid ""
+"Number of links showed per block. Every block displayed by the weblink "
+"module will adhere to this setting."
+msgstr "Megjelenített linkek száma blokkonként. Minden a weblink modul "
+"által generált blokk tiszteletben tartja ezt a beállítást."
+
+#: weblink.module:96
+msgid "Links per page"
+msgstr "Egy oldalon megjelenő linkek száma"
+
+#: weblink.module:96
+msgid ""
+"Number of links to show per page. Set to zero to show all links in a "
+"category on one page."
+msgstr ""
+"Ha ezt az értéket nullára állítod, akkor a kategóriák oldalain nem kell "
+"lapozni."
+
+#: weblink.module:98
+msgid "Display settings"
+msgstr "Megjelenés beállításai"
+
+#: weblink.module:100
+msgid "Default link target"
+msgstr "Alapértelmezett link célpont"
+
+#: weblink.module:100
+msgid "open in same window"
+msgstr "azonos ablak"
+
+#: weblink.module:100
+msgid "open in new window"
+msgstr "új ablak"
+
+#: weblink.module:100
+msgid "Open links in a new window or in the same window by default."
+msgstr "Azonos ablak felhasználása vagy új ablak nyitása a linkeknek."
+
+#: weblink.module:102
+msgid "User setting for target"
+msgstr "Célpontra vonatkozó felhasználói beállítás"
+
+#: weblink.module:102
+# msgid "deny"
+# msgstr ""
+
+#: weblink.module:102
+# msgid "allow"
+# msgstr ""
+
+#: weblink.module:102
+msgid "Allow users to specify their own preference via the user settings page."
+msgstr "A felhasználók személyes célpontbeállításának engedélyezése vagy tiltása."
+
+#: weblink.module:104
+msgid "Link targets"
+msgstr "Link célpontok"
+
+#: weblink.module:106 ;108
+msgid "Weblink monitoring"
+msgstr "Weblink megfigyelő"
+
+#: weblink.module:106
+# msgid "disabled"
+# msgstr ""
+
+#: weblink.module:106
+# msgid "enabled"
+# msgstr ""
+
+#: weblink.module:106
+msgid ""
+"Allow users with appropriate rights to add/edit weblink nodes to specify "
+"monitoring parameters, and allow the monitoring block to be shown."
+msgstr ""
+"Megfelelő jogokkal rendelkező felhasználók számára engedélyezi, hogy "
+"megfigyelési paramétereket állítsanak be különböző linkekre. A link megfigyelő "
+"blokk is csak akkor jelenik meg, ha a megfigyelést itt engedélyezed."
+
+#: weblink.module:119
+msgid "Weblink settings"
+msgstr "Linkek beállításai"
+
+#: weblink.module:119
+msgid "Open new window for weblinks"
+msgstr "Linkek megnyitása új ablakban"
+
+#: weblink.module:119 ;194
+# msgid "Disabled"
+# msgstr ""
+
+#: weblink.module:119 ;194
+# msgid "Enabled"
+# msgstr ""
+
+#: weblink.module:119
+msgid "Create a new window when you click on a weblink."
+msgstr "Külső linkek megnyitása új ablakban."
+
+#: weblink.module:158 ;194
+msgid "Weblink filter"
+msgstr "Weblink szűrő"
+
+#: weblink.module:194
+msgid "Weblinks"
+msgstr "Linkek"
+
+#: weblink.module:194
+msgid ""
+"When enabled, weblink codes will be replaced by a link to visit the real "
+"website. Syntax: [weblink:node_id] or [weblink:http://a.weblink.example.com/]"
+msgstr ""
+"Ha engedélyezed, a tartalmakban weblink kódokat lehet majd használni, melyek "
+"a webhely meglátogatását lehetővé tevő linkekkel helyettesítődnek a szűrés "
+"után. Használata például: <code>[weblink:node_id]</code> vagy <code>[weblink:"
+"http://a.weblink.example.com/]</code>"
+
+#: weblink.module:216
+msgid "Link"
+msgstr "Link"
+
+#: weblink.module:216
+msgid "Links should be submitted in a form similar to http://www.example.com/"
+msgstr ""
+"A linkek protokoll megjelöléssel együtt kell hogy szerepeljenek (például: "
+"http://www.example.com/)"
+
+#: weblink.module:225
+msgid "Monitor URL"
+msgstr "URL megfigyelése"
+
+#: weblink.module:225
+msgid "Monitor URL for changes."
+msgstr "URL változásfigyelése"
+
+#: weblink.module:226
+msgid "Update interval"
+msgstr "Ellenőrzési időköz"
+
+#: weblink.module:226
+msgid ""
+"The refresh interval indicating how often you want to check this site for "
+"updates. Requires crontab."
+msgstr ""
+"Ehhez a webhelyhez tartozó ellenőrzési időköz, azaz ilyen gyakran kerül "
+"górcső alá a weboldal. A cron szolgáltatást igényli."
+
+#: weblink.module:227
+msgid "Change threshold"
+msgstr "Változás mértéke"
+
+#: weblink.module:227
+msgid ""
+"The number of bytes the site must have been modified before considered "
+"changed."
+msgstr ""
+"Ennyi byte változás szükséges ahhoz, hogy a weboldalt változottnak kelljen "
+"tekinteni."
+
+#: weblink.module:228
+msgid "URL to monitor"
+msgstr "Megfigyelendő weboldal"
+
+#: weblink.module:228
+msgid ""
+"The URL of the page you want to monitor for updates. Likely to be same as "
+"the site's URL but useful to monitor framed pages and more accurate when "
+"pointed to a XML/RSS/RDF feed."
+msgstr ""
+"Azon oldal pontos URL-je, melyet a megfigyeléshez fel szeretnél használni. "
+"Lehet, hogy ez megegyezik a webhely URL-jével, de XML/RSS/RDF csatornákat "
+"praktikusabb megfigyelni, mert biztosabb, hogy egy változás tartalmi "
+"újdonságot jelent."
+
+#: weblink.module:229
+msgid "URL Monitoring"
+msgstr "URL megfigyelés"
+
+#: weblink.module:233
+msgid "Spider this site"
+msgstr "Webhely indexelése"
+
+#: weblink.module:233
+msgid "Use external mnogosearch engine to spider this site."
+msgstr "Az mnogosearch motor használata a webhely indexelésére."
+
+#: weblink.module:234
+msgid "URL to spider"
+msgstr "Indexelés kezdő címe"
+
+#: weblink.module:234
+msgid ""
+"The URL of the page you want to spider. All sub pages will be added to the "
+"mnogosearch index."
+msgstr ""
+"Azon oldal címe, melyet indexelni szeretnél. Minden aloldal bekerül az "
+"mnogosearch indexbe."
+
+#: weblink.module:235
+msgid "Mnogosearch indexing"
+msgstr "Mnogosearch indexelés"
+
+#: weblink.module:241
+# msgid "Body"
+# msgstr ""
+
+#: weblink.module:241
+msgid "Textual description of the weblink"
+msgstr "A link szöveges leírása"
+
+#: weblink.module:263
+msgid "A weblink %link-to-existing with that link already exists"
+msgstr "Egy link már létezik ezzel a célponttal: %link-to-existing"
+
+#: weblink.module:278 ;288
+msgid "Top weblinks"
+msgstr "Legnépszerűbb linkek"
+
+#: weblink.module:279 ;293
+msgid "Latest weblinks"
+msgstr "Legfrissebb linkek"
+
+#: weblink.module:280 ;299
+msgid "Monitored weblinks"
+msgstr "Megfigyelt linkek"
+
+#: weblink.module:300
+# msgid "more"
+# msgstr ""
+
+#: weblink.module:300
+msgid "Monitor external weblinks."
+msgstr "Linkek megfigyelése."
+
+#: weblink.module:344
+msgid "invalid or missing URL for '%node'"
+msgstr "érvénytelen vagy hiányos link '%node' számára"
+
+#: weblink.module:344 ;350
+msgid "edit site"
+msgstr "szerkesztés"
+
+#: weblink.module:350
+msgid "invalid or missing URL to monitor for '%node'"
+msgstr "érvénytelen vagy hiányos megfigyelendő link '%node' számára"
+
+#: weblink.module:394
+msgid "failed to syndicate from '%node'"
+msgstr "'%node' nem megfigyelhető"
+
+#: weblink.module:417
+msgid "Updated less than one hour ago"
+msgstr "Kevesebb mint egy órája frissült"
+
+#: weblink.module:489 ;555
+msgid "create weblink"
+msgstr "link létrehozása"
+
+#: weblink.module:489 ;555
+msgid "add a new weblink"
+msgstr "link létrehozása"
+
+#: weblink.module:492
+msgid "Weblink directory"
+msgstr "Linkek"
+
+#: weblink.module:501
+msgid "Monitored Weblinks"
+msgstr "Megfigyelt linkek"
+
+#: weblink.module:520
+msgid "Browsing %term"
+msgstr "%term"
+
+#: weblink.module:521
+msgid "Return to %vocabulary"
+msgstr "Visszatérés: %vocabulary"
+
+#: weblink.module:521
+msgid "Return to the links directory"
+msgstr "Visszatérés a linkek főoldalára"
+
+#: weblink.module:526
+msgid "Go to parent category %name"
+msgstr "Szülő kategória: %name"
+
+#: weblink.module:526
+msgid "Go to parent category %description"
+msgstr "Szülő kategória: %description"
+
+#: weblink.module:532
+msgid "Subcategories"
+msgstr "Alkategóriák"
+
+#: weblink.module:535
+msgid "Go to category %description"
+msgstr "%description"
+
+#: weblink.module:542
+msgid "Go to related category %name"
+msgstr "Kapcsolódó: %name"
+
+#: weblink.module:542
+msgid "Go to related category %description"
+msgstr "%description"
+
+#: weblink.module:576
+# msgid "detail"
+# msgstr ""
+
+#: weblink.module:576
+msgid "Read details, read and add comments."
+msgstr "Részletes informácó hozzászólások olvasása és beküldése."
+
+#: weblink.module:578
+# msgid "administer"
+# msgstr ""
+
+#: weblink.module:578
+msgid "Administer this node."
+msgstr "Tartalmi elem szerkesztése."
+
+#: weblink.module:420
+# msgid "Updated an hour ago"
+# msgid_plural "Updated %count hours ago"
+# msgstr[0] "Egy órája frissült"
+# msgstr[1] "%count órája frissült"
+
+msgid "Updated an hour ago"
+msgstr "Egy órája frissült"
+msgid "Updated %count hours ago"
+msgstr "%count órája frissült"
+
+#: weblink.module:428
+# msgid "Updated more than an hour ago"
+# msgid_plural "Updated more than %count hours ago"
+# msgstr[0] "Több mint egy órája frissült"
+# msgstr[1] "Több mint %count órája frissült"
+
+msgid "Updated more than an hour ago"
+msgstr "Több mint egy órája frissült"
+msgid_plural "Updated more than %count hours ago"
+msgstr "Több mint %count órája frissült"
+
+#: weblink.module:575
+# msgid "1 hit"
+# msgid_plural "%count hits"
+# msgstr[0] "egy találat"
+# msgstr[1] "%count találat"
+
+msgid "1 hit"
+msgstr "egy találat"
+msgid "%count hits"
+msgstr "%count találat"
+
+#: weblink.module:76
+msgid "create weblinks"
+msgstr "létrehozás: link"
+
+#: weblink.module:76
+msgid "access weblink monitor"
+msgstr "elérés: weblink megfigyelő"

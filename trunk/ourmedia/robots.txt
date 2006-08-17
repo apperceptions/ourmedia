@@ -1,0 +1,46 @@
+# A small robots.txt example
+# More information about this file can be found at
+# http://www.robotstxt.org/wc/robots.html
+
+# In case your drupal site is in a directory
+# lower than your docroot (e.g. /drupal)
+# please add this directory before the /-es below
+# this file should still be placed in the docroot (e.g. /)
+
+# To stop a polite robot indexing an exampledir
+# add a line like
+# user-agent: polite-bot
+# Disallow: /exampledir/
+
+# A list of know bots can be found at
+# http://www.robotstxt.org/wc/active/html/index.html
+
+# See http://www.sxw.org.uk/computing/robots/check.html
+# for syntax checking
+
+User-Agent: *
+Disallow: ?q=admin
+Disallow: /admin/
+Disallow: /error.php
+Disallow: /cron.php
+Disallow: /xmlrpc.php
+Disallow: /database/
+Disallow: /archive/
+Disallow: /aggregator/
+Disallow: /tracker/
+Disallow: /includes/
+Disallow: /modules/
+Disallow: /scripts/
+Disallow: /themes/
+Disallow: /project
+Disallow: /cvs
+Disallow: /comment/reply
+Disallow: /title
+Disallow: /node/add
+Disallow: /user
+Disallow: /files
+Disallow: /search
+Disallow: /book/print
+
+# Add other dirs or files here
+# For example /webreports/

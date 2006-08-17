@@ -1,0 +1,242 @@
+# Brazilian Portuguese Translation of Drupal
+# Copyright (c) 2005 Henrique Recidive <recidive@gmail.com>
+# $Id: pt-br.po,v 1.1.2.1 2005/05/18 19:59:23 recidive Exp $
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Drupal 4.6\n"
+"POT-Creation-Date: 2005-05-16 17:00-0300\n"
+"PO-Revision-Date: 2005-05-16 23:03-0300\n"
+"Last-Translator: Henrique Recidive Gonçalves <henrique@recidive.com>\n"
+"Language-Team: SacraHome.net <sacrahome@gmail.com>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Poedit-Language: Portuguese\n"
+"X-Poedit-Country: BRAZIL\n"
+
+#: buddylist.module:10
+msgid "Enable buddy list functionality."
+msgstr "Habilita a funcionalidade de lista de amigos."
+
+#: buddylist.module:12
+msgid "This help section needs to be updated."
+msgstr "Esta seção de ajuda precisa ser atualizada."
+
+#: buddylist.module:52
+msgid "Number of buddies to list in the user's buddy block"
+msgstr "Número de amigos para listar no bloco de amigos do usuário"
+
+#: buddylist.module:52
+msgid "This setting controls the maximum number of buddies displayed in a user's \"buddylist block\" given that the \"buddylist block\" is enabled in the %link."
+msgstr "Esta opção controla o número máximo de amigos mostrados no bloco \"Meus amigos\". Este bloco pode ser habilitado em %link."
+
+#: buddylist.module:52
+#: ;53
+msgid "block settings"
+msgstr "ajustes do bloco"
+
+#: buddylist.module:53
+msgid "Number of posts to list in the buddies' recent posts block"
+msgstr "Número de contribuições no bloco \"Contribuições recentes dos amigos\""
+
+#: buddylist.module:53
+msgid "This setting controls the maximum number of posts to display in a user's \"buddy recent posts\" block given that the \"buddies' recent posts\" block is enabled in the %link."
+msgstr "Esta opção controla o número máximo de entradas mostradas no bloco \"Contribuições recentes dos meus amigos\". Este bloco pode ser habilitado em %link."
+
+#: buddylist.module:54
+msgid "Block title"
+msgstr "Título do bloco"
+
+#: buddylist.module:54
+#: ;176
+msgid "My buddies' recent posts"
+msgstr "Contribuições recentes dos meus amigos"
+
+#: buddylist.module:54
+msgid "This will be the title for the recent buddies post block. If none is specified, the default will be used."
+msgstr "Isto será o título do bloco \"Contribuições recentes dos meus amigos\". Se não for especificado o título padrão será usado."
+
+#: buddylist.module:55
+msgid "Buddylist block options"
+msgstr "Opções do bloco da lista de amigos"
+
+#: buddylist.module:58
+msgid "Number of buddies and users who've added me"
+msgstr "Número de amigos e usuários que me adicionaram."
+
+#: buddylist.module:58
+msgid "The default maximum number of buddies and users who've added me as a buddy to display on a user's profile page."
+msgstr "O número máximo padrão de amigos e usuários que me adicionaram para ser mostrado na página de perfil do usuário."
+
+#: buddylist.module:59
+msgid "Profile page options"
+msgstr "Opções da página de perfil"
+
+#: buddylist.module:101
+msgid "Buddies"
+msgstr "Amigos"
+
+#: buddylist.module:113
+msgid "Buddy of"
+msgstr "Adicionado como amigo por"
+
+#: buddylist.module:122
+msgid "Remove <em>%name</em> from my buddy list"
+msgstr "Remover <em>%name</em> da minha lista de amigos"
+
+#: buddylist.module:126
+msgid "Add <em>%name</em> to my buddy list"
+msgstr "Adicionar <em>%name</em> à minha lista de amigos"
+
+#: buddylist.module:130
+msgid "Buddy actions"
+msgstr "Ações dos amigos"
+
+#: buddylist.module:143
+msgid "Buddy list"
+msgstr "Lista de amigos"
+
+#: buddylist.module:144
+msgid "Buddies' recent posts"
+msgstr "Contribuições recentes dos amigos"
+
+#: buddylist.module:163
+msgid "My buddy list"
+msgstr "Meus amigos"
+
+#: buddylist.module:167
+#: ;184
+msgid "more"
+msgstr "mais"
+
+#: buddylist.module:167
+#: ;184
+msgid "View more."
+msgstr "Ver mais."
+
+#: buddylist.module:208
+msgid "my buddylist"
+msgstr "meus amigos"
+
+#: buddylist.module:213
+msgid "buddies"
+msgstr "amigos"
+
+#: buddylist.module:214
+msgid "buddies of"
+msgstr "adicionaram-me como amigo"
+
+#: buddylist.module:216
+msgid "list"
+msgstr "listar"
+
+#: buddylist.module:217
+msgid "recent posts"
+msgstr "contribuições recentes"
+
+#: buddylist.module:219
+msgid "xml feed"
+msgstr "alimentação XML"
+
+#: buddylist.module:221
+msgid "add to buddylist"
+msgstr "adicionar à lista de amigos"
+
+#: buddylist.module:222
+msgid "delete from buddylist"
+msgstr "remover da lista de amigos"
+
+#: buddylist.module:231
+msgid "The buddylist module requires the profile module to be enabled in order to use this functionality"
+msgstr "O módulo buddylist requer que o módulo profile esteja ativado para poder usar esta funcionalidade"
+
+#: buddylist.module:238
+#: ;283
+msgid "%username's buddylist"
+msgstr "lista de amigos do(a) %username"
+
+#: buddylist.module:268
+msgid "none"
+msgstr "nenhum"
+
+#: buddylist.module:307
+msgid "Buddies recent posts on %site"
+msgstr "Contribuições recentes dos amigos no %site"
+
+#: buddylist.module:319
+#: ;343
+msgid "This user does not exist"
+msgstr "Este usuário não existe"
+
+#: buddylist.module:322
+msgid "This user is already on your buddy list"
+msgstr "Este usuário já está na sua lista de amigos"
+
+#: buddylist.module:325
+msgid "Cannot add yourself to buddy list"
+msgstr "Você não pode adicionar você mesmo a sua lista de amigos"
+
+#: buddylist.module:328
+#: ;334
+msgid "add user"
+msgstr "adicionar usuário"
+
+#: buddylist.module:333
+msgid "Add user %name to your buddy list?"
+msgstr "Adicionar %name à sua lista de amigos?"
+
+#: buddylist.module:334
+msgid "%name will be be notified the next time s/he logs in."
+msgstr "%name irá ser notificado na próxima vez que entrar no site."
+
+#: buddylist.module:346
+msgid "This user is not on your buddy list"
+msgstr "Este usuário não está na sua lista de amigos"
+
+#: buddylist.module:349
+#: ;354
+msgid "remove user"
+msgstr "remover usuário"
+
+#: buddylist.module:353
+msgid "Remove user %name from your buddy list?"
+msgstr "Remover o usuário %name da sua lista de amigos?"
+
+#: buddylist.module:354
+msgid "%name will be not be notified the next time s/he logs in."
+msgstr "%name não será notificado na próxima vez que entrar no site."
+
+#: buddylist.module:368
+msgid "<em>%username</em> has been added to your buddy list"
+msgstr "<em>%username</em> foi adicionado à sua lista de amigos"
+
+#: buddylist.module:370
+msgid "<em>%username</em> is already on your buddylist"
+msgstr "<em>%username</em> já está na sua lista de amigos"
+
+#: buddylist.module:378
+msgid "<em>%username</a> removed from buddylist"
+msgstr "<em>%username</em> foi removido da lista de amigos"
+
+#: buddylist.module:383
+msgid "User %name was NOT added to your buddylist."
+msgstr "O usuário %name NÃO foi adicionado na sua lista de amigos."
+
+#: buddylist.module:388
+msgid "User %name was NOT removed to your buddylist."
+msgstr "O usuário %name NÃO foi removido da sua lista de amigos."
+
+#: buddylist.module:196
+msgid "maintain buddy list"
+msgstr "manter lista de amigos"
+
+#: buddylist.module:196
+msgid "view buddy lists"
+msgstr "ver listas de amigos"
+
+#: buddylist.module:0
+msgid "buddylist"
+msgstr "lista de amigos"
+

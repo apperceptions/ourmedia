@@ -1,0 +1,12 @@
+taxonomy_context.module
+CREDITS
+
+Written by
+  - Nedjo Rogers <nedjo at gworks dot ca>
+
+Rewrite for Drupal 4.5
+  - László Bácsi <lackac {at} math [dot] bme [dot] hu>
+
+Thanks to 
+  - Drupal.org users including MikalH, kbahey@drupal.org, darius for contributed bug fixes
+

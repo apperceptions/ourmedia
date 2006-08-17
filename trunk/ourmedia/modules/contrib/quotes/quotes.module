@@ -1,0 +1,1150 @@
+<?php
+// $Id: quotes.module,v 1.11.2.2 2004/11/18 03:21:57 jhriggs Exp $
+
+/**
+ * The quotes module allows users to maintain a list of quotes that
+ * can be displayed in any number of administrator-defined quote
+ * blocks.
+ *
+ * @version $Id: quotes.module,v 1.11.2.2 2004/11/18 03:21:57 jhriggs Exp $
+ * @copyright Copyright (c) 2003-2004 Jim Riggs.  All rights reserved.
+ * @author Jim Riggs <drupal at jim and lissa dot com>
+ */
+
+/* This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307  USA
+ */
+
+/* Code notes:
+ *   - Local, non-boolean variables start with "the" as in $the_output
+ *     and $the_quote.  Local boolean variables start with words such
+ *     as "is" or "has" to indicate there meaning as in $is_installed
+ *     and $has_title.  Short-lived loop variables use standard, short
+ *     names as in $i and $x.
+ *
+ *   - Function parameters are prefixed with "in", "out", or "io" to
+ *     indicate their use as input, output, or input-output,
+ *     respectively, as in $in_title.
+ *
+ *   - All functions are prefixed with "quotes_" and words are
+ *     separated with underscores.
+ *
+ *   - All tables created and used by the module are prefixed with
+ *     "quotes_" to avoid name collisions.  This is not currently
+ *     recommended (as far as I am aware) in the module developer
+ *     information, but probably should be.
+ *
+ *   - I make extensive use of heredoc syntax and multiline strings.
+ *     It looks much nicer than dozens of "$var .= ..." lines and is
+ *     easier to read and format -- especially the HTML tags.  It
+ *     helps in outputting HTML pages that are well-formatted and
+ *     readable.
+ */
+
+/********************************************************************
+ * Drupal Hooks
+ ********************************************************************/
+
+/**
+ * Implementation of hook_perm().
+ */
+function quotes_perm() {
+  return array('administer quotes', 'edit own quotes', 'promote quotes to block');
+} // function quotes_perm
+
+/**
+ * Implementation of hook_menu().
+ */
+function quotes_menu($in_may_cache) {
+  global $user;
+
+  $the_items = array();
+
+  if (_quotes_is_installed() && $in_may_cache) {
+    $the_items[] = array(
+      'path' => 'node/add/quotes',
+      'title' => t('quotes'),
+      'access' => user_access('edit own quotes'));
+    $the_items[] = array(
+      'path' => 'node/add/quotes/add',
+      'title' => t('add'),
+      'access' => user_access('edit own quotes'),
+      'type' => MENU_DEFAULT_LOCAL_TASK);
+    $the_items[] = array(
+      'path' => 'node/add/quotes/import',
+      'title' => t('import'),
+      'access' => user_access('edit own quotes'),
+      'type' => MENU_LOCAL_TASK);
+    $the_items[] = array(
+      'path' => 'quotes',
+      'title' => t('quotes'),
+      'access' => user_access('access content'),
+      'callback' => '_quotes_page',
+      'type' => MENU_SUGGESTED_ITEM);
+    $the_items[] = array(
+      'path' => 'quotes/feed',
+      'title' => t('RSS feed'),
+      'access' => user_access('access content'),
+      'callback' => '_quotes_feed',
+      'type' => MENU_CALLBACK);
+    $the_items[] = array(
+      'path' => "quotes/$user->uid",
+      'title' => t('my quotes'),
+      'access' => user_access('edit own quotes'),
+      'type' => MENU_DYNAMIC_ITEM);
+    $the_items[] = array(
+      'path' => 'admin/quotes',
+      'title' => t('quotes'),
+      'access' => user_access('administer quotes'),
+      'callback' => '_quotes_admin_overview');
+    $the_items[] = array(
+      'path' => 'admin/quotes/overview',
+      'title' => t('overview'),
+      'callback' => '_quotes_admin_overview',
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+      'weight' => -1);
+    $the_items[] = array(
+      'path' => 'admin/quotes/blocks',
+      'title' => t('configure blocks'),
+      'callback' => '_quotes_blocks',
+      'type' => MENU_LOCAL_TASK);
+    $the_items[] = array(
+      'path' => 'admin/quotes/add',
+      'title' => t('add block'),
+      'callback' => '_quotes_blocks_form',
+      'type' => MENU_LOCAL_TASK,
+      'weight' => 1);
+    $the_items[] = array(
+      'path' => 'admin/quotes/edit',
+      'title' => t('configure quote block'),
+      'callback' => '_quotes_blocks_form',
+      'type' => MENU_CALLBACK);
+    $the_items[] = array(
+      'path' => 'admin/quotes/delete',
+      'title' => t('delete quote block'),
+      'callback' => '_quotes_blocks_delete',
+      'type' => MENU_CALLBACK);
+  }
+  elseif ($in_may_cache) {
+    $the_ver = quotes_version();
+    $the_cur_ver = variable_get('quotes_version', NULL);
+
+    $the_items[] = array(
+      'path' => 'node/add/quotes/upgrade',
+      'title' => t('upgrade'),
+      'access' => (user_access('administer quotes') && $the_cur_ver && ($the_cur_ver['build'] < $the_ver['build'])));
+    $the_items[] = array(
+      'path' => 'admin/quotes',
+      'title' => t('quotes'),
+      'access' => user_access('administer quotes'),
+      'callback' => '_quotes_admin_overview');
+  }
+
+  return $the_items;
+} // function quotes_menu
+
+/**
+ * Implementation of hook_node_name().
+ */
+function quotes_node_name($in_node) {
+  return t('quote');
+} // function quotes_node_name
+
+/**
+ * Implementation of hook_access().
+ */
+function quotes_access($in_op, $in_node) {
+  global $user;
+
+  switch ($in_op) {
+    case 'create':
+      return _quotes_is_installed() && user_access('edit own quotes') && $user->uid;
+
+    case 'update':
+    case 'delete':
+      return (user_access('edit own quotes') && ($user->uid == $in_node->uid));
+  }
+} // function quotes_access
+
+/**
+ * Implementation of hook_form().
+ */
+function quotes_form(&$io_node) {
+  $the_output = '';
+
+  if (function_exists('taxonomy_node_form')) {
+    $the_output .= implode('', taxonomy_node_form('quotes', $io_node));
+  }
+
+  if (user_access('promote quotes to block')) {
+    $the_output .= form_checkbox(t('Display in random quote blocks'), 'quotes_promote', 1, (isset($io_node->quotes_promote) ? $io_node->quotes_promote : 1));
+  }
+
+  switch (arg(3)) {
+    case 'import':
+      $the_output .= form_radios(t('Format'), 'quotes_format', ($io_node->quotes_format ? $io_node->quotes_format : 'text'), array('text' => t('Tab-separated text'), 'fortune' => t('Fortune file')), NULL, TRUE);
+      $the_output .= form_textarea(t('Quotes'), 'body', $io_node->body, 60, 20, NULL, NULL, TRUE);
+      break;
+
+    case 'upgrade':
+      if (!$io_node->body) {
+        $io_node->body = '';
+        $the_result = db_query_range('SELECT q.quote, q.author FROM {quotes_quotes} q ORDER BY q.qid', variable_get('quotes_upgrade_start', 0), 1000);
+
+        while ($the_quote = db_fetch_object($the_result)) {
+          $io_node->body .= str_replace("\n", "\\\n", $the_quote->quote) . "\t$the_quote->author\n";
+        }
+      }
+
+      $the_output .= form_hidden('quotes_format', 'text');
+      $the_output .= form_textarea(t('Quotes'), 'body', $io_node->body, 60, 20, NULL, NULL, TRUE);
+      break;
+
+    default:
+      $the_output .= form_textarea(t('Quote'), 'body', $io_node->body, 60, 7, NULL, NULL, TRUE);
+      $the_output .= form_textarea(t('Author'), 'quotes_author', $io_node->quotes_author, 60, 3);
+      break;
+  }
+
+  $the_output .= filter_form('format', $io_node->format);
+
+  return $the_output;
+} // function quotes_form
+
+/**
+ * Implementation of hook_validate().
+ */
+function quotes_validate(&$io_node) {
+  if (!isset($io_node->body)) {
+    return;
+  }
+
+  if ($io_node->quotes_importing || (!in_array(arg(3), array('import', 'upgrade')))) { // single quote
+    if (!trim($io_node->body)) {
+      form_set_error('body', t('Please enter a quote.'));
+    }
+  }
+  else { // import/upgrade
+    if (!trim($io_node->body)) {
+      form_set_error('body', t('Please enter the quote data to import.'));
+      return;
+    }
+
+    // validate
+    $the_quotes = _quotes_parse_import($io_node, TRUE);
+
+    /* If the node is being submitted, we will actually perform the
+     * import here, submitting each imported quote as a separate
+     * node. Each will be validated and saved using code replicated
+     * from node_save() and node_submit().
+     */
+    if ($_POST['op'] == t('Submit')) {
+      $the_count = 0;
+      $the_temp = $io_node;
+      $the_temp->quotes_importing = TRUE;
+
+      foreach ($the_quotes as $the_quote) {
+        unset($the_temp->nid, $the_temp->validated, $the_temp->teaser, $the_temp->path);
+        $the_temp->title = $io_node->title;
+        $the_temp->body = $the_quote->body;
+        $the_temp->teaser = '';
+        $the_temp->quotes_author = $the_quote->quotes_author;
+
+        $the_temp = node_validate(object2array($the_temp));
+
+        if (form_get_errors()) {
+          form_set_error('body', t('Only the first %d quotes were imported.', array('%d' => $the_count)));
+          return;
+        }
+
+        if (node_access('create', $the_temp)) {
+          $the_temp->nid = node_save($the_temp);
+
+          // replace %id variable in title
+          if (strpos($the_temp->title, '%id') !== FALSE) {
+            $the_temp->title = str_replace('%id', $the_temp->nid, $the_temp->title);
+            db_query("UPDATE {node} SET title = '%s' WHERE nid = %d", $the_temp->title, $the_temp->nid);
+          }
+
+          $the_count++;
+          watchdog('special', t('%type: added %title.', array('%type' => '<em>'. t($the_temp->type) .'</em>', '%title' => "<em>$the_temp->title</em>")), l(t('view'), "node/$the_temp->nid"));
+        }
+      }
+
+      /* If upgrading, either get the next batch of quotes to import,
+       * or designate the module as finally being completely installed.
+       */
+      if (arg(3) == 'upgrade') {
+        $the_start = variable_get('quotes_upgrade_start', 0);
+        $the_total = db_result(db_query('SELECT COUNT(*) FROM {quotes_quotes} qq'));
+
+        if (($the_start + 1000) < $the_total) {
+          variable_set('quotes_upgrade_start', $the_start + 1000);
+          drupal_set_message(t('1000 quotes imported. %remaining existing quotes remaining to be imported.', array('%remaining' => $the_total - $the_start - 1000)));
+          drupal_goto('node/add/quotes/upgrade');
+        }
+
+        $the_ver = quotes_version();
+        $the_cur_ver = variable_get('quotes_version', NULL);
+
+        db_query('DROP TABLE {quotes_quotes}');
+        variable_del('quotes_upgrade_start');
+        variable_del('quotes_upgrade_tables_created');
+        variable_del('quotes_title');
+        variable_set('quotes_version', $the_ver);
+        cache_clear_all('menu:', TRUE);
+        drupal_set_message(t('The quotes module has been upgraded from version %old to version %new. %count existing quotes were successfully imported.', array('%old' => $the_cur_ver['text'], '%new' => $the_ver['text'], '%count' => $the_total)));
+      }
+      else {
+        drupal_set_message(t('%count quotes imported.', array('%count' => $the_count)));
+      }
+
+      drupal_goto('quotes');
+    }
+  }
+} // function quotes_validate
+
+/**
+ * Implementation of hook_load().
+ */
+function quotes_load($in_node) {
+  return db_fetch_object(db_query("SELECT q.author AS quotes_author, q.promote AS quotes_promote FROM {quotes} q WHERE q.nid = %d", $in_node->nid));
+} // function quotes_load
+
+/**
+ * Implementation of hook_insert().
+ */
+function quotes_insert($in_node) {
+  db_query("INSERT INTO {quotes} (nid, author, promote) VALUES (%d, '%s', %d)", $in_node->nid, $in_node->quotes_author, $in_node->quotes_promote);
+} // function quotes_insert
+
+/**
+ * Implementation of hook_update().
+ */
+function quotes_update($in_node) {
+  db_query("UPDATE {quotes} SET author = '%s', promote = %d WHERE nid = %d", $in_node->quotes_author, $in_node->quotes_promote, $in_node->nid);
+} // function quotes_update
+
+/**
+ * Implementation of hook_delete().
+ */
+function quotes_delete($in_node) {
+  db_query("DELETE FROM {quotes} WHERE nid = %d", $in_node->nid);
+} // function quotes_delete
+
+/**
+ * Implementation of hook_view().
+ */
+function quotes_view(&$io_node, $in_is_teaser = FALSE, $in_is_page = FALSE) {
+  if ($in_is_page) {
+    // Breadcrumb navigation
+    $the_breadcrumb[] = array('path' => 'quotes', 'title' => t('quotes'));
+    $the_breadcrumb[] = array('path' => 'quotes/'. $io_node->uid, 'title' => t("%name's quotes", array('%name' => $io_node->name)));
+    $the_breadcrumb[] = array('path' => 'node/'. $io_node->nid);
+    menu_set_location($the_breadcrumb);
+  }
+
+  // prepare the node content
+  if (!$io_node->quotes_format) {
+    $io_node->body = $io_node->teaser = theme('quotes_quote', $io_node);
+  }
+  else { // importing/upgrading
+    $the_quotes = array();
+
+    foreach (_quotes_parse_import($io_node) as $the_quote) {
+      $the_quotes[] = theme('quotes_quote', $the_quote);
+    }
+
+    $io_node->teaser = t('The quotes that will be imported are displayed below.');
+    $io_node->body = theme('item_list', $the_quotes, t('%d quotes will be imported:', array('%d' => count($the_quotes))));
+  }
+} // function quotes_view
+
+/**
+ * Implementation of hook_link().
+ */
+function quotes_link($in_type, $in_node = 0, $in_is_main) {
+  if (!_quotes_is_installed()) {
+    return;
+  }
+
+  $the_links = array();
+
+  if ($in_type == 'page' && user_access('access content')) {
+    $the_links[] = l(t('quotes'), 'quotes', array('title' => t('View the latest quotes.')));
+  }
+
+  if ($in_type == 'node' && $in_node->type == 'quotes' && !(arg(0) == 'quotes' && arg(1) == $in_node->uid)) {
+    $the_links[] = l(t("%username's quotes", array('%username' => $in_node->name)), "quotes/$in_node->uid", array('title' => t("View %username's quotes.", array('%username' => $in_node->name))));
+  }
+
+  return $the_links;
+} // function quotes_link
+
+/**
+ * Implementation of hook_search().
+ */
+function quotes_search($in_keys) {
+  return array(
+    t('Matching quotes'),
+    do_search(array(
+      'keys' => $in_keys,
+      'type' => 'node',
+      'select' => "SELECT DISTINCT s.lno, n.title, n.created, u.uid, u.name, s.count FROM {search_index} s INNER JOIN {node} n ON n.nid = s.lno INNER JOIN {users} u ON u.uid = n.uid " . node_access_join_sql() . " WHERE n.type = 'quotes' AND n.status = 1 AND s.type = 'quotes' AND s.word LIKE '%' AND " . node_access_where_sql())));
+} // function quotes_search
+
+/**
+ * Implementation of hook_update_index().
+ */
+function quotes_update_index() {
+  return array(
+    'last_update' => 'quotes_cron_last',
+    'node_type' => 'quotes',
+    'select' => 'SELECT n.nid AS lno, CONCAT(n.title, n.body) AS text1, q.author AS text2 FROM {quotes} q INNER JOIN {node} n ON n.nid = q.nid WHERE n.status = 1 AND n.changed > ' . variable_get('quotes_cron_last', 1));
+} // function quotes_update_index
+
+/**
+ * Implementation of hook_user().
+ */
+function quotes_user($in_type, &$io_edit, &$io_user) {
+  if ($in_type == 'view' && user_access('edit own quotes', $io_user)) {
+    return array(t('History') => form_item(t('Quotes'), l(t("view %user's quotes", array('%user' => $io_user->name)), "quotes/$io_user->uid", array('title' => t("View %username's quotes.", array('%username' => $io_user->name))))));
+  }
+} // function quotes_user
+
+/**
+ * Implementation of hook_block().
+ */
+function quotes_block($in_operation = 'list', $in_block_num = 0) {
+  if (!_quotes_is_installed()) {
+    return NULL;
+  }
+
+  if ($in_operation == 'list') {
+    $the_blocks = array();
+    $the_result = db_query('SELECT qb.bid, qb.name FROM {quotes_blocks} qb');
+
+    while ($the_block = db_fetch_object($the_result)) {
+      $the_blocks[$the_block->bid] = array('info' => t('Quotes') . ": $the_block->name");
+    }
+
+    return $the_blocks;
+  }
+  else {
+    $the_block = db_fetch_array(db_query('SELECT qb.* FROM {quotes_blocks} qb WHERE qb.bid = %d', $in_block_num));
+
+    if (!$the_block) {
+      return NULL;
+    }
+
+    $the_quote = node_load(array('nid' => quotes_get_quote($the_block, TRUE)));
+
+    return array('subject' => t(str_replace('%title', $the_quote->title, $the_block['title'])), 'content' => theme('quotes_quote', $the_quote));
+  }
+} // function quotes_block
+
+/**
+ * Implementation of hook_help().
+ */
+function quotes_help($in_section = 'admin/help#quotes') {
+  switch ($in_section) {
+    case 'node/add#quotes':
+      return t('A quote is a famous, humorous, witty, infamous, or otherwise noteworthy quotation or fortune file entry. Quotes can be entered one at a time or mass imported in either tab-separated text or fortune file format.');
+
+    case 'node/add/quotes':
+      return t('Use the form below to enter a single quote. Multiple quotes can also be %link in either tab-separted text or fortune file format.', array('%link' => l(t('mass imported'), 'node/add/quotes/import')));
+
+    case 'node/add/quotes/import':
+      return t('
+<p>
+  Use the form below to mass import quotes in either tab-separated
+  text or fortune file format. Many quotes will be imported in this
+  one step by creating an individual node for each imported quote. See
+  the notes below for more information.
+</p>
+<p><strong>Notes:</strong></p>
+<ul>
+  <li>
+    Tab-separated quotes should appear one quote per line in the
+    format <em><span style="color: blue;">quote</span><span
+    style="color: red;">&lt;tab&gt;</span><span style="color:
+    green;">author</span></em>. The author is optional; however, the
+    tab is still required. To import quotes or authors with more than
+    one line, escape the embedded newlines with a backslash.
+    Examples:
+
+  <pre style="font-size: .75em;">
+<span style="color: blue;">Single-line quote.</span><em style="color: red;">&lt;tab&gt;</em><span style="color: green;">Author</span>
+<span style="color: blue;">Quote without author.</span><em style="color: red;">&lt;tab&gt;</em>
+<span style="color: blue;">Multi-line quote: line 1...\
+...line 2.</span><em style="color: red;">&lt;tab&gt;</em><span style="color: green;">Author line 1\
+Author line 2</span>
+<span style="color: blue;">Another quote.<em style="color: red;">&lt;tab&gt;</em><span style="color: green;">Another Author</span>
+  </pre>
+
+  </li>
+  <li>
+    Fortune files do not explicitly provide an author or attribution
+    for each quote/fortune. This import will extract an author when
+    there is a line of the form <em>-- Author</em> with any amount of
+    leading whitespace.  Examples:
+
+  <pre style="font-size: .75em;">
+<span style="color: blue;">A fortune without an author.</span>
+<em style="color: red;">%</em>
+<span style="color: blue;">Fortune with author.</span>
+--<span style="color: green;">Author</span>
+<em style="color: red;">%</em>
+<span style="color: blue;">Multi-line fortune: line 1...
+...line 2.</span>
+          -- <span style="color: green;">Author line 1
+             Author line 2</span>
+  </pre>
+
+  </li>
+  <li>
+    Any settings used in the form below (comment, moderation, sticky,
+    input format, categories, etc.) will be applied to all imported
+    quotes.
+  </li>
+  <li>
+    The title entered below will be applied to all quotes. You can use
+    the variable <em>%id</em> in the title which will be replaced by
+    the newly-created quote\'s node ID.
+  </li>
+  <li>
+    Fortune files and tab-separated text data can contain many
+    quotes. To avoid timeout errors while importing large amounts of
+    data, consider importing in smaller chunks with no more than 1000
+    quotes at a time.
+  </li>
+  <li>
+    If the path module is enabled, you cannot create a path alias
+    while importing, as the import will attempt to use the same path
+    for every quote.
+  </li>
+</ul>
+');
+
+    case 'node/add/quotes/upgrade':
+      return t('
+<p>
+  This page is designed to mass import your existing quotes from
+  Drupal 4.4 or earlier. Many quotes will be imported in this one step
+  by creating an individual node for each imported quote. See the
+  notes below for more information.
+</p>
+<p><strong>Notes:</strong></p>
+<ul>
+  <li>
+    The form below is designed to automatically import 1000 existing
+    quotes at a time. If you have more than 1000 existing quotes, you
+    will be returned to this page after each 1000-quote submission to
+    import the next batch.
+  </li>
+  <li>
+    The body field below shows the quotes that will be imported in a
+    tab-separated text format. You do not need to modify this
+    field. Performing a preview will display the quotes as they will
+    be imported.
+  </li>
+  <li>
+    Any settings used in the form below (comment, moderation, sticky,
+    input format, categories, etc.) will be applied to all upgraded
+    quotes.
+  </li>
+  <li>
+    The title entered below will be applied to all quotes. You can use
+    the variable <em>%id</em> in the title which will be replaced by
+    the newly-created quote\'s node ID.
+  </li>
+  <li>
+    If the path module is enabled, you cannot create a path alias
+    while importing, as the import will attempt to use the same path
+    for every quote.
+  </li>
+</ul>
+');
+
+    case 'admin/modules#description':
+      return t('Allows users to maintain personal lists of quotations and display randomly-selected quotes in one or more blocks.');
+
+    case 'admin/quotes':
+      return t('Displayed below is the status of the quotes module.');
+
+    case 'admin/quotes/blocks':
+      return t('
+You can define any number of blocks that will each display random
+quotes. The quotes displayed in each block can be restricted to
+certain node IDs, roles, users, or categories. Each block has a name
+that is used only for identification on the %link and a title that is
+shown when the block is displayed. The block title can contain the
+variable <em>%title</em> which will be replaced by the
+randomly-selected quote\'s title.
+', array('%link' => l(t('block administration page'), 'admin/block')));
+
+    case 'admin/quotes/add':
+      return t('Use the form below to define a new random quote block.');
+
+    case 'admin/help#quotes': return t('
+The quotes module allows users to maintain a list of quotations that
+they find notable, humorous, famous, infamous, or otherwise worthy of
+sharing with website visitors. The quotes can be displayed in any
+number of administrator-defined blocks. These blocks will display
+randomly-selected quotes based on the restrictions of each
+block. Blocks can be configured to restrict to certain nodes, roles,
+users, or categories.
+');
+  }
+} // function quotes_help
+
+/********************************************************************
+ * Themeable Functions
+ ********************************************************************/
+
+/**
+ * Themeable function that displays a single quote and optional author.
+ *
+ * @param $in_node
+ *   The node object containing the quote body and author.
+ *
+ * @return
+ *   An HTML-formatted quote.
+ *
+ * @ingroup themeable
+ */
+function theme_quotes_quote($in_node) {
+  $in_node->body = check_output($in_node->body, $in_node->format);
+  $the_author = ($in_node->quotes_author ? check_output(variable_get('quotes_leader', '&mdash;') . ' ' . $in_node->quotes_author, $in_node->format) : '');
+
+  return "
+<div class=\"quotes-quote\">
+  $in_node->body
+</div>
+" . ($the_author ?
+"<div class=\"quotes-author\">
+  $the_author
+</div>
+" : '');
+} // function theme_quotes_quote
+
+/**
+ * Themeable function that displays a page of quotes that may be
+ * restricted to a certain user.
+ *
+ * @param $in_uid
+ *   The user ID of the user whose quotes should be displayed.
+ *
+ * @ingroup themeable
+ */
+function theme_quotes_page($in_uid = 0) {
+  $the_edit = $_POST['edit'];
+  $the_sort_options = array('n.created' => t('creation date'), 'n.title' => t('title'), 'q.author' => t('author'));
+  $the_order_options = array('ASC' => t('ascending'), 'DESC' => t('descending'));
+  $the_limit_options = array(variable_get('default_nodes_main', 10) => variable_get('default_nodes_main', 10), 10 => 10, 25 => 25, 50 => 50, 75 => 75, 100 => 100);
+
+  $the_sort = (array_key_exists($the_edit['quotes_page_sort'], $the_sort_options) ? $the_edit['quotes_page_sort'] : 'n.created');
+  $the_order = (array_key_exists($the_edit['quotes_page_order'], $the_order_options) ? $the_edit['quotes_page_order'] : 'DESC');
+  $the_limit = (array_key_exists($the_edit['quotes_page_limit'], $the_limit_options) ? $the_edit['quotes_page_limit'] : variable_get('default_nodes_main', 10));
+
+  if ($in_uid) {
+    $the_user = user_load(array((is_numeric($in_uid) ? 'uid' : 'name') => $in_uid, 'status' => 1));
+
+    if (!$the_user->uid) {
+      drupal_not_found();
+      return;
+    }
+
+    $the_title = t("%name's quotes", array('%name' => $the_user->name));
+    $the_url = url("quotes/feed/$the_user->uid");
+    $the_result = pager_query('SELECT DISTINCT(n.nid), n.sticky, n.created, n.title, q.author FROM {node} n INNER JOIN {quotes} q ON q.nid = n.nid ' . node_access_join_sql() . " WHERE n.type = 'quotes' AND n.uid = %d AND n.status = 1 AND " . node_access_where_sql() . " ORDER BY n.sticky DESC, $the_sort $the_order", $the_limit, 0, NULL, $the_user->uid);
+  }
+  else {
+    $the_title = 'quotes';
+    $the_url = url('quotes/feed');
+    $the_result = pager_query('SELECT DISTINCT(n.nid), n.sticky, n.created, n.title, q.author FROM {node} n INNER JOIN {quotes} q ON q.nid = n.nid ' . node_access_join_sql() . " WHERE n.type = 'quotes' AND n.status = 1 AND " . node_access_where_sql() . " ORDER BY n.sticky DESC, $the_sort $the_order", $the_limit);
+  }
+
+  $the_form = t('Sort by: ');
+  $the_form .= form_select(NULL, 'quotes_page_sort', $the_sort, $the_sort_options);
+  $the_form .= form_select(NULL, 'quotes_page_order', $the_order, $the_order_options);
+  $the_form .= t('Quotes per page: ');
+  $the_form .= form_select(NULL, 'quotes_page_limit', $_POST['edit']['quotes_page_limit'], $the_limit_options);
+  $the_form .= form_submit(t('Go'), NULL);
+
+  $the_output = form_item(t('Display options'), form($the_form, 'post', NULL, array('class' => 'container-inline')));
+
+  while ($the_node = db_fetch_object($the_result)) {
+    $the_output .= node_view(node_load(array('nid' => $the_node->nid)), 1);
+  }
+
+  $the_output .= theme('pager', NULL, $the_limit);
+  $the_output .= theme('xml_icon', $the_url);
+
+  drupal_set_html_head("<link rel=\"alternate\" type=\"application/rss+xml\" title=\"RSS - $the_title\" href=\"$the_url\" />");
+  print theme('page', $the_output, $the_title);
+} // function theme_quotes_page
+
+/********************************************************************
+ * Module Functions
+ ********************************************************************/
+
+/**
+ * Returns the node ID for either a random quote based on the provided
+ * filter criteria.
+ *
+ * @param $in_filters
+ *   The array specifying filter criteria to be passed to
+ *   quotes_block_join_sql() and quotes_block_where_sql().
+ * @param $in_promoted_only
+ *   The boolean specifying whether or not only promoted quotes should
+ *   be returned.
+ *
+ * @return
+ *   The node ID for a random quote matching the specified criteria.
+ */
+function quotes_get_quote($in_filters = array(), $in_promoted_only = FALSE) {
+  $the_query = '
+SELECT %s
+FROM {quotes} q INNER JOIN {node} n ON n.nid = q.nid ' . quotes_block_join_sql($in_filters) . node_access_join_sql() . '
+WHERE n.status = 1 AND ' . ($in_promoted_only ? ' q.promote = 1 AND ' : '') . quotes_block_where_sql($in_filters) . ' AND ' . node_access_where_sql();
+
+  // get the number of quotes in the database
+  $the_count = db_result(db_query($the_query, 'COUNT(*)'));
+
+  if (!$the_count) {
+    return NULL;
+  }
+
+  // pick and retrieve a quote
+  return db_result(db_query_range($the_query, 'n.nid', rand(0, $the_count - 1), 1));
+} // function quotes_get_quote
+
+/**
+ * Returns the SQL join text necessary for the provided filter
+ * criteria.
+ *
+ * @param $in_filters
+ *   The array specifying filter criteria using the keys nid_filter,
+ *   rid_filter, uid_filter, and tid_filter.
+ * @param $in_node_alias
+ *   The string specifying the alias used to identify the node table
+ *   in the existing part of the query.
+ * @param $in_aliases
+ *   The array specifying the aliases to be used for the tables that
+ *   may be joined based on the provided filter criteria. Keys are the
+ *   table names users_roles, users, and term_node.
+ *
+ * @return
+ *   A string containing the SQL join text necessary for the provided
+ *   criteria.
+ */
+function quotes_block_join_sql($in_filters = array(), $in_node_alias = 'n', $in_aliases = array('users_roles' => 'qur', 'users' => 'qu', 'term_node' => 'qtn')) {
+  $the_join = '';
+
+  if ($in_filters['rid_filter']) {
+    $the_join .= " INNER JOIN {users_roles} $in_aliases[users_roles] ON $in_aliases[users_roles].uid = $in_node_alias.uid ";
+  }
+
+  if ($in_filters['uid_filter']) {
+    $the_join .= " INNER JOIN {users} $in_aliases[users] ON $in_aliases[users].uid = $in_node_alias.uid ";
+  }
+
+  if ($in_filters['tid_filter']) {
+    $the_join .= " INNER JOIN {term_node} $in_aliases[term_node] ON $in_aliases[term_node].nid = $in_node_alias.nid ";
+  }
+
+  return $the_join;
+} // function quotes_join_sql
+
+/**
+ * Returns the SQL where text necessary for the provided filter
+ * criteria.
+ *
+ * @param $in_filters
+ *   The array specifying filter criteria using the keys nid_filter,
+ *   rid_filter, uid_filter, and tid_filter.
+ * @param $in_aliases
+ *   The array specifying the aliases used for the tables that are
+ *   being joined in the query. Keys are the table names node,
+ *   users_roles, users, and term_node.
+ *
+ * @return
+ *   A string containing the SQL where text necessary for the provided
+ *   criteria.
+ */
+function quotes_block_where_sql($in_filters = array(), $in_aliases = array('node' => 'n', 'users_roles' => 'qur', 'users' => 'qu', 'term_node' => 'qtn')) {
+  $the_where = array();
+
+  if ($in_filters['nid_filter']) {
+    $the_where[] = " $in_aliases[node].nid IN ($in_filters[nid_filter]) ";
+  }
+
+  if ($in_filters['rid_filter']) {
+    $the_where[] = " $in_aliases[users_roles].rid IN ($in_filters[rid_filter]) ";
+  }
+
+  if ($in_filters['uid_filter']) {
+    $the_where[] = " $in_aliases[users].uid IN ($in_filters[uid_filter]) ";
+  }
+
+  if ($in_filters['tid_filter']) {
+    $the_where[] = " $in_aliases[term_node].tid IN ($in_filters[tid_filter]) ";
+  }
+
+  return (count($the_where) ? implode('AND', $the_where) : "'1'");
+} // function quotes_where_sql
+
+/**
+ * Returns the version of this release of the quotes module.
+ *
+ * @return
+ *   An array with keys 'text' and 'build' containing the text version
+ *   and build ID of this release, respectively.
+ */
+function quotes_version() {
+  /* Why text and an ID?  Well, the text is easier for the user to
+   * read and understand while the build ID, being a number (a date
+   * with a serial, specifically), is easier for the developer to use
+   * to determine newer/older versions for upgrade and installation
+   * purposes.
+   */
+  return array('text' => '4.5r3', 'build' => 2004111700);
+} // function quotes_version
+
+/**
+ * Indicates whether or not the quotes module is installed and
+ * up-to-date, transparently upgrading compatible versions when
+ * possible.
+ *
+ * @return
+ *   TRUE if the module is up to date; FALSE, otherwise.
+ */
+function _quotes_is_installed() {
+  $the_ver = quotes_version();
+  $the_cur_ver = variable_get('quotes_version', NULL);
+
+  // upgrade as necessary
+  if ($the_cur_ver && ($the_cur_ver['build'] >= 2004111100) && ($the_cur_ver['build'] < $the_ver['build'])) {
+    variable_set('quotes_version', $the_ver);
+    return TRUE;
+  }
+
+  return ($the_ver['build'] == $the_cur_ver['build']);
+} // function _quotes_is_installed
+
+/**
+ * Menu callback that calls theme_quotes_page().
+ */
+function _quotes_page($in_uid = 0) {
+  theme('quotes_page', $in_uid);
+} // function _quotes_page
+
+/**
+ * Displays an RSS feed containing recent quotes of a given user.
+ *
+ * @param $in_uid
+ *   The user ID of the user's quotes to be fed.
+ */
+function _quotes_feed_user($in_uid = 0) {
+  global $user;
+
+  $the_user = ($in_uid ? user_load(array('uid' => $in_uid, 'status' => 1)) : $user);
+  $the_result = db_query_range('SELECT n.nid, n.title, n.teaser, n.created, u.name, u.uid FROM {node} n ' . node_access_join_sql() . ' INNER JOIN {users} u ON n.uid = u.uid WHERE ' . node_access_where_sql() . " AND n.type = 'quotes' AND u.uid = %d AND n.status = 1 ORDER BY n.created DESC", $the_user->uid, 0, 15);
+  node_feed($the_result, array('title' => t("%user's quotes", array('%user' => $the_user->name)), 'link' => url("quotes/$the_user->uid", NULL, NULL, TRUE)));
+} // function _quotes_feed_user
+
+/**
+ * Displays an RSS feed containing recent quotes of all users.
+ */
+function _quotes_feed_last() {
+  $the_result = db_query_range('SELECT n.nid, n.title, n.teaser, n.created, u.name, u.uid FROM {node} n ' . node_access_join_sql() . ' INNER JOIN {users} u ON n.uid = u.uid WHERE ' . node_access_where_sql() . " AND n.type = 'quotes' AND n.status = 1 ORDER BY n.created DESC", 0, 15);
+  node_feed($the_result, array('title' => variable_get('site_name', 'drupal') . ' ' . t('quotes'), 'link' => url("quotes", NULL, NULL, TRUE)));
+} // function _quotes_feed_last
+
+/**
+ * Parses and returns the quotes contained in the provided node body.
+ *
+ * @param $in_node
+ *   The node object containing the data to be parsed.
+ * @param $in_set_errors
+ *   The boolean indicating whether or not form erros should be set.
+ *
+ * @return
+ *   An array containing the parsed quotes as objects with properties
+ *   body, quotes_author, and format.
+ */
+function _quotes_parse_import($in_node, $in_set_errors = FALSE) {
+  $the_quotes = array();
+
+  if ($in_node->quotes_format == 'text') {
+    foreach (explode("\r", str_replace("\\\r", "\n", preg_replace('<(?:\r\n?|\n)>', "\r", trim($in_node->body)))) as $the_quote) {
+      $the_quote = explode("\t", $the_quote);
+
+      if (count($the_quote) != 2) {
+        if ($in_set_errors) {
+          form_set_error('body', t('Parse error on quote %d.', array('%d' => count($the_quotes) + 1)));
+        }
+
+        break;
+      }
+
+      $the_quotes[] = array2object(array('body' => $the_quote[0], 'quotes_author' => $the_quote[1], 'format' => $in_node->format));
+    }
+  }
+  elseif ($in_node->quotes_format == 'fortune') {
+    foreach(preg_split('<\n+%+\n+>', str_replace("\t", '    ', preg_replace('<(?:\r\n?|\n)>', "\n", $in_node->body))) as $the_quote) {
+      if (preg_match('<^(?:(?:(.*)\n+\s*--\s*(.*?)))$>s', $the_quote, $the_matches)) {
+        $the_quotes[] = array2object(array('body' => $the_matches[1], 'quotes_author' => $the_matches[2], 'format' => $in_node->format));
+      }
+      else {
+        $the_quotes[] = array2object(array('body' => $the_quote, 'format' => $in_node->format));
+      }
+    }
+  }
+  elseif ($in_set_errors) {
+    form_set_error('quotes_format', t('Please select a valid import format.'));
+  }
+
+  return $the_quotes;
+} // function _quotes_parse_import
+
+/**
+ * Displays an overview of the module status.
+ */
+function _quotes_admin_overview() {
+  switch ($_POST['op']) {
+    case t('Install'):
+    case t('Upgrade'):
+      require_once(dirname(__FILE__) . '/install.inc');
+      _quotes_install();
+      break;
+
+    case t('Submit'):
+      variable_set('quotes_leader', $_POST['edit']['quotes_leader']);
+      drupal_set_message(t('Settings successfully saved.'));
+      break;
+  }
+
+  $the_cur_ver = variable_get('quotes_version', NULL);
+
+  if (!_quotes_is_installed()) {
+    if ($the_cur_ver) {
+      $the_output = t('<p>The quotes module must be upgraded to continue.  Press <em>Upgrade</em> to create the new database tables and import your existing quotes.</p>');
+      $the_output .= form(form_submit(t('Upgrade')));
+    }
+    else {
+      $the_output = t('<p>The quotes module must be installed to continue.  Press <em>Install</em> to proceed</p>');
+      $the_output .= form(form_submit(t('Install')));
+    }
+
+    print theme('page', $the_output);
+    return;
+  }
+
+  $the_form = form_item(t('Status'), t('Installed'));
+  $the_form .= form_item(t('Version'), $the_cur_ver['text']);
+  $the_form .= form_item(t('Quotes'), db_result(db_query("SELECT COUNT(*) FROM {node} n where type = 'quotes'")));
+  $the_form .= form_textfield(t('Author leader'), 'quotes_leader', variable_get('quotes_leader', '&mdash;'), 32, 32, t('The text placed before the author attribution (i.e. "&amp;mdash;" for an em-dash or "&amp;#8226;" for a bullet).'));
+  $the_form .= form_submit(t('Submit'));
+  $the_output = form($the_form);
+
+  print theme('page', $the_output);
+} //function _quotes_admin_overview
+
+/**
+ * Displays a list of currently-defined quote blocks.
+ */
+function _quotes_blocks() {
+  if ($_POST['op'] == t('Save')) {
+    foreach ($_POST['edit']['blocks'] as $the_bid => $the_block) {
+      if (!$the_block['name']) {
+        form_set_error("blocks][$the_bid][name", t('Please enter a name'));
+        continue;
+      }
+
+      db_query("UPDATE {quotes_blocks} SET name = '%s', title = '%s' WHERE bid = %d", $the_block['name'], $the_block['title'], $the_bid);
+    }
+
+    drupal_set_message(t('Blocks successfully updated.'));
+  }
+
+  $the_header = array(array('data' => t('Name'), 'field' => 'name'), array('data' => t('Title'), 'field' => 'title'), t('Filters'), array('data' => t('Operations'), 'colspan' => 2));
+  $the_result = db_query('SELECT qb.* FROM {quotes_blocks} qb ' . tablesort_sql($the_header));
+  $the_rows = array();
+
+  while ($the_block = db_fetch_object($the_result)) {
+    $the_filters = array();
+
+    if ($the_block->nid_filter) {
+      $the_filters[] = t('node');
+    }
+
+    if ($the_block->rid_filter) {
+      $the_filters[] = t('role');
+    }
+
+    if ($the_block->uid_filter) {
+      $the_filters[] = t('user');
+    }
+
+    if ($the_block->tid_filter) {
+      $the_filters[] = t('term');
+    }
+
+    $the_rows[] = array(
+      form_textfield(NULL, "blocks][$the_block->bid][name", $the_block->name, 16, 255),
+      form_textfield(NULL, "blocks][$the_block->bid][title", $the_block->title, 16, 255),
+      implode(', ', (count($the_filters) ? $the_filters : array(t('none')))),
+      l(t('configure'), "admin/quotes/edit/$the_block->bid"),
+      l(t('delete'), "admin/quotes/delete/$the_block->bid"));
+  }
+
+  if (count($the_rows)) {
+    $the_output .= form(theme('table', $the_header, $the_rows) . form_submit(t('Save')));
+  }
+  else {
+    $the_output .= theme('table', $the_header, array(array(array('data' => t('No blocks are defined.'), 'colspan' => 5))));
+  }
+
+  print theme('page', $the_output);
+} // function _quotes_blocks
+
+/**
+ * Displays a form for adding or editing a quote block.
+ */
+function _quotes_blocks_form($in_bid = 0) {
+  if ($_POST['op'] == t('Submit')) {
+    $the_name = trim($_POST['edit']['name']);
+    $the_title = trim($_POST['edit']['title']);
+    $the_nids = trim($_POST['edit']['nid_filter']);
+    $the_rids = ($_POST['edit']['rid_filter'] ? implode(',', $_POST['edit']['rid_filter']) : '');
+    $the_uids = ($_POST['edit']['uid_filter'] ? implode(',', $_POST['edit']['uid_filter']) : '');
+    $the_tids = ($_POST['edit']['tid_filter'] ? implode(',', $_POST['edit']['tid_filter']) : '');
+
+    if (!$the_name) {
+      form_set_error('name', t('Please enter a block name.'));
+    }
+
+    if ($the_nids) {
+      if (!preg_match('<^(?:\d+\W+)*\d+$>', $the_nids, $the_nids)) {
+        form_set_error('nid_filter', t('Please enter valid node IDs.'));
+      }
+      else {
+        $the_nids = preg_replace('<\W+>', ',', $the_nids[0]);
+      }
+    }
+
+    if (!form_get_errors()) {
+      if ($in_bid) {
+        if (db_query("UPDATE {quotes_blocks} SET name = '%s', title = '%s', nid_filter = '%s', rid_filter = '%s', uid_filter = '%s', tid_filter = '%s' WHERE bid = %d", $the_name, $the_title, $the_nids, $the_rids, $the_uids, $the_tids, $in_bid)) {
+          drupal_set_message(t('Block <em>%name</em> successfully updated.', array('%name' => $the_name)));
+          drupal_goto("admin/quotes/blocks");
+        }
+        else {
+          drupal_set_message(t('Block <em>%name</em> could not be updated.', array('%name' => $the_name)), 'error');
+        }
+      }
+      else {
+        $the_id = db_next_id('{quotes}_bid');
+
+        if (db_query("INSERT INTO {quotes_blocks} (bid, name, title, nid_filter, rid_filter, uid_filter, tid_filter) VALUES (%d, '%s', '%s', '%s', '%s', '%s', '%s')", $the_id, $the_name, $the_title, $the_nids, $the_rids, $the_uids, $the_tids)) {
+          drupal_set_message(t('Block <em>%name</em> successfully created.', array('%name' => $the_name)));
+          drupal_goto("admin/quotes/blocks");
+        }
+        else {
+          drupal_set_message(t('Block <em>%name</em> could not be created.', array('%name' => $the_name)), 'error');
+        }
+      }
+    }
+  }
+  elseif ($in_bid) {
+    $_POST['edit'] = db_fetch_array(db_query("SELECT qb.* FROM {quotes_blocks} qb WHERE bid = %d", $in_bid));
+    $_POST['edit']['rid_filter'] = explode(',', $_POST['edit']['rid_filter']);
+    $_POST['edit']['uid_filter'] = explode(',', $_POST['edit']['uid_filter']);
+    $_POST['edit']['tid_filter'] = explode(',', $_POST['edit']['tid_filter']);
+  }
+
+  // get roles
+  $the_roles = user_roles(FALSE, 'edit own quotes');
+
+  // get users
+  $the_users = array();
+  $the_result = db_query("SELECT DISTINCT u.uid, u.name FROM {users} u INNER JOIN {users_roles} ur ON ur.uid = u.uid WHERE ur.rid IN (%s)", implode(',', (count($the_roles) ? array_keys($the_roles) : array(0))));
+
+  while ($the_row = db_fetch_object($the_result)) {
+    $the_users[$the_row->uid] = ($the_row->uid ? $the_row->name : variable_get('anonymous', t('Anonymous')));
+  }
+
+  $the_form = form_textfield(t('Name'), 'name', $_POST['edit']['name'], 40, 255, t('Enter a unique name for this block. This will identify the block on the %link.', array('%link' => l('block administration page', 'admin/block'))), NULL, TRUE);
+  $the_form .= form_textfield(t('Block title'), 'title', $_POST['edit']['title'], 40, 255, t('Enter the title that will be used for this block when displayed. If desired, you can include the string <em>%title</em> which will be replaced by the title of the quote being displayed in the block.'));
+  $the_form .= form_textarea(t('Node filter'), 'nid_filter', $_POST['edit']['nid_filter'], 40, 4, t('To restrict this block to display only certain quotes based on node IDs, enter the IDs here separated by commas, spaces, or returns.'));
+
+  if (count($the_roles)) {
+    $the_form .= form_select(t('Role filter'), 'rid_filter', $_POST['edit']['rid_filter'], $the_roles, t('To restrict this block to display only quotes submitted by users in specific roles, select the roles here.'), NULL, TRUE);
+  }
+  else {
+    $the_form .= form_item(t('Role filter'), t('There are no roles configured with the <em>edit own quotes</em> permission, so no roles are available. To filter by role, please assign this permission to at least one role on the %link.', array('%link' => l(t('permission administration page'), 'admin/user/configure/permission'))));
+  }
+
+  if (count($the_users)) {
+    $the_form .= form_select(t('User filter'), 'uid_filter', $_POST['edit']['uid_filter'], $the_users, t('To restrict this block to display only quotes submitted by specific users, select the users here.'), NULL, TRUE);
+  }
+  else {
+    $the_form .= form_item(t('User filter'), t('There are no users with the <em>edit own quotes</em> permission, so no users are available. To filter by user, please assign at least one user to a role with this permission on the %link.', array('%link' => l(t('user administration page'), 'admin/user'))));
+  }
+
+  if (function_exists('taxonomy_node_form')) {
+    $the_group = '';
+
+    // duplicate taxonomy_node_form logic
+    $the_result = db_query("SELECT v.vid FROM {vocabulary} v WHERE v.nodes LIKE '%%quotes%%' ORDER BY v.weight, v.name");
+    while ($the_voc = db_fetch_object($the_result)) {
+      $the_voc = taxonomy_get_vocabulary($the_voc->vid);
+      $the_group .= _taxonomy_term_select($the_voc->name, 'tid_filter', $_POST['edit']['tid_filter'], $the_voc->vid, $the_voc->help, TRUE, FALSE);
+    }
+
+    if ($the_group) {
+      $the_form .= form_group(t('Category filter'), $the_group, t('To restrict this block to display only quotes in specific categories, select the categories here.'));
+    }
+    else {
+      $the_form .= form_item(t('Category filter'), t('There are no vocabularies assigned to quotes. To filter by categories, please assign at least one vocabulary to quotes on the %link.', array('%link' => l(t('category administration page'), 'admin/taxonomy'))));
+    }
+  }
+
+  $the_form .= form_submit(t('Submit'));
+
+  $the_output .= form($the_form);
+
+  print theme('page', $the_output);
+} // function _quotes_blocks_form
+
+/**
+ * Confirms and deletes a quote block.
+ */
+function _quotes_blocks_delete($in_bid) {
+  $the_block = db_fetch_object(db_query('SELECT qb.name FROM {quotes_blocks} qb WHERE qb.bid = %d', $in_bid));
+
+  if ($_POST['op'] == t('Delete')) {
+    db_query("DELETE FROM {quotes_blocks} WHERE bid = %d", $in_bid);
+    drupal_set_message(t('Block <em>%name</em> deleted.', array('%name' => $the_block->name)));
+    drupal_goto('admin/quotes/blocks');
+  }
+
+  $the_output = t('<p>Are you sure you want to delete the block <em>%name</em>?', array('%name' => $the_block->name));
+  $the_output .= form(form_submit(t('Delete')));
+
+  print theme('page', $the_output);
+} // function _quotes_blocks_delete
+?>

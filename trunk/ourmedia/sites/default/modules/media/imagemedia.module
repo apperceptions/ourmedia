@@ -1,0 +1,236 @@
+<?php
+$fid_media = -1;
+require_once "ourmedia.php";
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function imagemedia_nodeapi($node, $op, $arg) {
+  return ourmedia_nodeapi($node, $op, 'imagemedia');
+}
+
+/**
+ * Implementation of hook_help().
+*/
+function imagemedia_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Enables users to publish images.');
+    case 'node/add#image':
+      return t("Publish a image and enter all other metadata information about it.");
+  }
+}
+
+/**
+ * Implementation of hook_node_name().
+ */
+function imagemedia_node_name($node) {
+  return t('image');
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function imagemedia_perm() {
+  return array('publish images', 'edit own images');
+}
+
+/**
+ * Implementation of hook_access().
+ */
+function imagemedia_access($op, $node) {
+  global $user;
+
+  if ($op == 'create') {
+    return user_access('publish images');
+  }
+
+  if ($op == 'update' || $op == 'delete') {
+    if (user_access('edit own images') && ($user->uid == $node->uid)) {
+      return TRUE;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_link().
+ */
+function imagemedia_link($type, $node = 0, $main) {
+  $links = array();
+  if ($type == 'node' && $node->type == 'imagemedia') {
+    // Don't display a redundant edit link if they are node administrators.
+    if (imagemedia_access('update', $node) && !user_access('administer nodes')) {
+      $links[] = l(t('edit this image'), "node/$node->nid/edit");
+    }
+  }
+  return $links;
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function imagemedia_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array('path' => 'node/add/imagemedia', 'title' => t('image'),
+    'access' => imagemedia_access('create', NULL));
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_validate().
+ */
+function imagemedia_validate($node) {
+  return ourmedia_validate($node,'imagemedia');
+}
+
+/**
+ * Specifies the valid image files
+ */
+function get_image_supported_filemime() {
+  return array(
+    'image/gif',
+    'image/ief',
+    'image/jpeg',
+    'image/tiff',
+    'image/x-rgb',
+    'image/pjpeg'
+  );
+}
+
+/**
+ * Validates the image url
+ */
+function validate_image_url($node, $fileid_type) {
+  return validate_url($node, $fileid_type,'imagemedia'); 
+}
+         
+/**
+ * Implementation of hook_form().
+ */
+function imagemedia_form(&$node, &$param) {
+  return  ourmedia_mediaform(&$node, &$param , 'imagemedia');
+}
+
+/**
+ * Generates image fields values
+*/
+function get_image_field_value($node, $field) {
+  return get_ourmedia_field_value($node, $field,'imagemedia'); 
+}
+
+/**
+ * Generates image specific fields
+ */
+function get_image_specific_fields($node) {
+  return get_ourmedia_specific_fields($node,'imagemedia');
+}
+
+/**
+ * Generates image taxonomy
+ */
+function get_image_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy') {
+  return get_ourmedia_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy'); 
+}
+/**
+ * Implementation of hook_content().
+ */
+function imagemedia_content($node, $main = 0) {
+  return node_prepare($node, $main);
+}
+
+/**
+ * Implementation of hook_load().
+ */
+function imagemedia_load($node) {
+  global $fid_image;
+  $output = array();
+
+  $result = db_query("SELECT * FROM {imagemedia} where nid = %d", $node->nid);
+  if($result) {
+    $output = db_fetch_object($result);
+    $fid_image = $output->image_fileid;
+    $output->imageurl = '';
+    $imageurl_result = db_query("SELECT filepath from {files} where fid = %d", $output->image_fileid);
+    if($imageurl_result && db_num_rows($imageurl_result) > 0) {
+      $output->imageurl = file_create_url(db_result($imageurl_result));
+    }
+  }
+  $returns = array('image' => $output);
+  return $returns;
+}
+
+
+/**
+ * Implementation of hook_view()
+ */
+function imagemedia_view(&$node, $teaser) {
+  return ourmedia_view(&$node, $teaser,'imagemedia'); 
+}
+
+/**
+ * Generates theme for the page
+ */
+function theme_image_view($node, $image_data, $image_metadata, $image_taxonomy) {
+  $output =  theme_ourmedia_view($node, $video_data, $video_metadata, $media_taxonomy,'imagemedia');
+  $output = theme('box', 'Image', $output);
+  if(isset($image_metadata)) {
+    foreach($image_metadata as $image_fields) {
+      if($image_fields) {
+        $output_metadata .= "<div><b>" . $image_fields['title'] . "</b>: " . $image_fields['value'] ."</div>";
+      }
+    }
+    $output .= theme('box', 'Other Metadata', $output_metadata);
+  }
+  return $output;
+}
+
+
+/**
+ * Display image.
+ */
+function show_image($image_fields_all) {
+  $mediaURL = $image_fields_all->imageurl;
+  $size = getimagesize($mediaURL);
+  if($size) {     
+    $width = $size[0];
+  }
+  else {
+    $width = 460;
+  }
+  
+  if($width > 460) {
+    $output = "<img src=\"$mediaURL\" width=\"460px\" style=\"border: solid 1px #4A4A4A;\" />";
+  }
+  else {
+    $output = "<img src=\"$mediaURL\" style=\"border: solid 1px #4A4A4A;\" />";
+  }
+   
+  return $output;
+}
+
+
+/**
+ * Implementation of hook_insert().
+ */
+function imagemedia_insert($node) {
+  return ourmedia_insert($node,'imagemedia');
+} 
+
+
+/**
+ * Implementation of hook_update().
+ */
+function imagemedia_update($node) {
+  return ourmedia_update($node,'imagemedia');
+}
+
+
+/**
+ * Implementation of hook_delete().
+ */
+function imagemedia_delete($node) {
+  db_query('DELETE FROM {imagemedia} WHERE nid = %d', $node->nid);
+}
+?>

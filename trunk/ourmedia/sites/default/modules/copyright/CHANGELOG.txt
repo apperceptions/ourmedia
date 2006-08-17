@@ -1,0 +1,4 @@
+Copyright Module Changelog
+
+December 27, 2004
+  * Initial Release by Matt Schwartz <matt at mattschwartz dot net>

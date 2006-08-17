@@ -1,0 +1,297 @@
+<?php
+// $Id: mediarss.module,v 1.0 2005/10/05 gauravb Exp $
+
+/**
+ * @file
+ * Enables MediaRSS feeds for Ourmedia
+ */
+
+/**
+ * Menu callback; displays an RSS feed containing recent media entries
+ */
+function mediarss_feed($type = 'all') {
+  global $base_url, $locale;
+
+  $five_days_back = time() - (5 * 24 * 60 * 60);
+  if ($type == 'all') {
+    $result = db_query("SELECT n.nid AS nid FROM node n, ia i WHERE (n.type = 'videomedia' OR n.type = 'audiomedia' OR n.type = 'textmedia' OR n.type = 'imagemedia') AND (n.nid = i.nid) AND (i.status = 1) AND n.created > $five_days_back ORDER BY n.created DESC LIMIT 20");
+  }
+  else {
+    $result = db_query("SELECT n.nid AS nid FROM node n, ia i WHERE (n.type = '$type') AND (n.nid = i.nid) AND (i.status = 1) AND n.created > $five_days_back ORDER BY n.created DESC LIMIT 20");
+  }
+
+	if (db_num_rows($result) > 0) {
+	    while ($onenode = db_fetch_array($result)) {
+	      $nodes[] = $onenode['nid'];
+	    }
+		$items = mediarss_get_items($nodes);
+	}
+
+    $channel = array(
+      'version'     => '2.0',
+      'title'       => 'Ourmedia MediaRSS Feed',
+      'link'        => $base_url,
+      'description' => 'Recently published media items from Ourmedia.org',
+      'language'      => $locale
+    );
+
+    $output = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    $output .= "<rss version=\"". $channel["version"] . "\" xml:base=\"". $base_url ."\" ". "xmlns:media=\"http://search.yahoo.com/mrss\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"" .">\n";
+    $output .= format_rss_channel($channel['title'], $channel['link'], $channel['description'], $items, $channel['language']);
+    $output .= "</rss>\n";
+
+    drupal_set_header('Content-Type: text/xml; charset=utf-8');
+    print $output;
+	page_set_cache();
+}
+
+function mediarss_get_items($nodes)
+{
+
+  if ($nodes) {
+    foreach ($nodes as $value) {
+      $node = node_load(array('nid' => $value));
+      // Filter and prepare node teaser
+      if (node_hook($node, 'view')) {
+        node_invoke($node, 'view', TRUE, FALSE);
+      }
+      else {
+        $node = node_prepare($node, TRUE);
+      }
+      $link = url("node/$node->nid", NULL, NULL, 1);
+      $mediarss = mediarss_create_media_rss($node);
+
+      $extra = array('pubDate' => date('r', $node->changed),'dc:creator' => $node->metadata['metadata_author']);
+      $extra = array_merge($extra,node_invoke_nodeapi($node, 'rss item'));
+
+      $items .= mediarss_format_rss_item($node->title, $link, $node->metadata['metadata_description'], $mediarss, $extra);
+    }
+
+  }
+	return $items;
+}
+
+/**
+ * Menu callback; displays an RSS feed containing media entries for a given user
+ */
+function mediarss_feed_user($uid) {
+  if (!isset($uid) || empty($uid)) {
+    return;
+  }
+
+  $account = user_load(array('uid' => $uid, 'status' => 1));
+
+	if (!$account) {
+		return;
+	}
+
+  $feedname = $account->name ."'s media";
+  $feedurl = url("user/$uid", NULL, NULL, TRUE);
+
+  global $base_url, $locale;
+  $result = db_query("SELECT n.nid AS nid FROM node n, ia i WHERE (n.uid = %d) AND  (n.nid = i.nid) AND (i.status = 1) ORDER BY n.created DESC", $uid);
+
+	if (db_num_rows($result) > 0) {
+	    while ($onenode = db_fetch_array($result)) {
+	      $nodes[] = $onenode['nid'];
+	    }
+		$items = mediarss_get_items($nodes);
+	}
+
+    $channel = array(
+      'version'     => '2.0',
+      'title'       => $feedname,
+      'link'        => $feedurl,
+      'description' => 'Recently published media items from Ourmedia.org',
+      'language'      => $locale
+    );
+
+    $output = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    $output .= "<rss version=\"". $channel["version"] . "\" xml:base=\"". $base_url ."\" ". "xmlns:media=\"http://search.yahoo.com/mrss\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"" .">\n";
+    $output .= format_rss_channel($channel['title'], $channel['link'], $channel['description'], $items, $channel['language']);
+    $output .= "</rss>\n";
+
+    drupal_set_header('Content-Type: text/xml; charset=utf-8');
+    print $output;
+	mediarss_set_cache();
+}
+
+function mediarss_create_media_rss($node) {
+  $output = "<media:content ";
+  switch ($node->type) {
+    case 'videomedia':
+        $fid = $node->video->video_fileid;
+        break;
+    case 'audiomedia':
+        $fid = $node->audio->audio_fileid;
+        break;
+    case 'imagemedia':
+        $fid = $node->image->image_fileid;
+        break;
+    case 'textmedia':
+        $fid = $node->text->text_fileid;
+        break;
+  }
+  $result = db_query("SELECT * FROM {files} WHERE fid = %d", $fid);
+  if (db_num_rows($result)) {
+    $file = db_fetch_object($result);
+  }
+  $url = ia_download_url($node->ia_identifier, $file->filename);
+  $output .= "url = \"$url\" ";
+  if ($file->filesize) {
+    $output .= "fileSize = \"$file->filesize\" ";
+  }
+  if ($file->filemime) {
+    $output .= "type = \"$file->filemime\" ";
+  }
+  if ($node->metadata['metadata_istrailer']) {
+    $output .=  "expression = \"sample\" ";
+  }
+  if ($framerate = $node->video->framerate) {
+    $output .= "framerate = \"$framerate\" ";
+  }
+  if ($node->video->length) {
+    $length = $node->video->length;
+  }
+  else if ($node->audio->length) {
+    $length = $node->audio->length;
+  }
+  if ($length) {
+    $output .= "duration = \"$length\" ";
+  }
+  //bitrate?
+  $output .= "/>";
+  return $output;
+  
+}
+
+function mediarss_format_rss_item($title, $link, $description, $mediarss, $args = array()) {
+  $output = "<item>\n";
+  $output .= ' <title>'. check_plain(strip_tags($title)) ."</title>\n";
+  $output .= ' <link>'. check_plain(strip_tags($link)) ."</link>\n";
+  $output .= ' <description>'. check_plain($description) ."</description>\n";
+  foreach ($args as $key => $value) {
+    if (is_array($value)) {
+      if ($value['key']) {
+        $output .= ' <'. $value['key'];
+        if (is_array($value['attributes'])) {
+          $output .= drupal_attributes($value['attributes']);
+        }
+
+        if ($value['value']) {
+          $output .= '>'. $value['value'] .'</'. $value['key'] .">\n";
+        }
+        else {
+          $output .= " />\n";
+        }
+      }
+    }
+    else {
+      $output .= ' <'. $key .'>'. check_plain($value) ."</$key>\n";
+    }
+  } 
+  $output .= "$mediarss\n";
+  $output .= "</item>\n";
+
+  return $output;
+}
+
+function mediarss_set_cache()
+{
+global $user, $base_url;
+
+if (!$user->uid && $_SERVER['REQUEST_METHOD'] == 'GET') {
+    // This will fail in some cases, see page_get_cache() for the explanation.
+    if ($data = ob_get_contents()) {
+      if (function_exists('gzencode')) {
+        if (version_compare(phpversion(), '4.2', '>=')) {
+          $data = gzencode($data, 9, FORCE_GZIP);
+        }
+        else {
+          $data = gzencode($data, FORCE_GZIP);
+        }
+      }
+      ob_end_flush();
+      cache_set($base_url . request_uri(), $data, CACHE_PERMANENT, drupal_get_headers());
+    }
+  } 
+
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function mediarss_user($op, &$edit, &$user, $category = NULL)
+{
+  switch ($op) 
+	{
+		case 'insert':
+		  $feedname = $user->name ."'s media";
+		  $userpage = url("user/" . $user->uid, NULL, NULL, TRUE);
+		  $feedurl = url("mediarss/user/" . $user->uid, NULL, NULL, TRUE);
+
+if (function_exists("xmlrpc")) {
+		$result = xmlrpc('http://news.blogdigger.com/RPC2','weblogUpdates.ping',$feedname,$userpage,$feedurl);
+		  if ($result === FALSE) {
+		    watchdog('directory ping', t('Failed to notify blogdigger.com (site).'), WATCHDOG_WARNING);
+		  }
+}
+
+		break;
+	}
+}
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+
+function mediarss_nodeapi(&$node, $op, $teaser = NULL, $page = NULL)
+{
+
+  switch ($op) {
+
+case 'insert':
+case 'delete':
+case 'update':
+
+if (substr($node->type,-5) == 'media')
+{
+$mediatitle = $node->title;
+$mediapage = url("node/" . $node->nid, NULL, NULL, TRUE);
+$feedurl = url("mediarss/user/" . $node->uid, NULL, NULL, TRUE);
+cache_clear_all($feedurl);
+
+if (function_exists("xmlrpc")) {
+$result = xmlrpc('http://news.blogdigger.com/RPC2','weblogUpdates.ping',$mediatitle,$mediapage,$feedurl);
+  if ($result === FALSE) {
+    watchdog('directory ping', t('Failed to notify blogdigger.com (site).'), WATCHDOG_WARNING);
+  }
+}
+
+}
+
+break;
+
+}
+
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function mediarss_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'mediarss', 'title' => t('Media RSS Feed'),
+      'callback' => 'mediarss_feed',
+      'access' => user_access('access content'),
+      'type' => MENU_CALLBACK);
+  }
+  $items[] = array('path' => 'mediarss/user', 'title' => t('Media RSS Feed'),
+      'callback' => 'mediarss_feed_user',
+      'access' => user_access('access content'),
+      'type' => MENU_CALLBACK);
+  return $items;
+}
+?>

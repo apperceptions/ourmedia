@@ -1,0 +1,26 @@
+taxonomy_context.module
+INSTALL
+
+Requirements
+------------
+
+This module requires Drupal 4.5 RC or later.
+
+Installation
+------------
+
+This module requires no modification to the Drupal database.
+
+1. Create a new directory "taxonomy_context" in the modules/ directory
+   and copy there:
+   * taxonomy_context.module
+   * taxonomy_context.css
+   * the images directory together with its content (two image files).
+
+2. Go to administration > settings > modules in the administration 
+   pages and enable the module.
+
+3. Check the "settings" page and set the module settings to your liking.
+
+See README.txt for more details.
+

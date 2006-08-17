@@ -1,0 +1,72 @@
+INSERT INTO copyrights (cpyid, name, description, site_notice, node_notice) 
+VALUES (1, 'All Rights Reserved', 'All Rights Reserved', 'Copyright &copy; %year %site<br/>All Rights Reserved', 'Copyright &copy; %year %author<br/>All Rights Reserved');
+
+INSERT INTO copyrights (cpyid, name, description, site_notice, node_notice) 
+VALUES (2, 'Public Domain', 'Public Domain', 'All content of this site is released into the public domain except where otherwise noted.', 'This page is released into the public domain.');
+
+INSERT INTO copyrights (cpyid, name, description, site_notice, node_notice, source_url, image_url) 
+VALUES (3, 'Creative Commons BY-NC-SA', 'Creative Commons Attribution-NonCommercial-ShareAlike 2.0 License', 'Except where otherwise noted, this work is licensed under a <a href="%source_url">Creative Commons License</a>.
+<!--
+
+<rdf:RDF xmlns="http://web.resource.org/cc/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<Work rdf:about="">
+   <dc:type rdf:resource="http://purl.org/dc/dcmitype/Text" />
+   <license rdf:resource="http://creativecommons.org/licenses/by-nc-sa/2.0/" />
+</Work>
+
+<License rdf:about="http://creativecommons.org/licenses/by-nc-sa/2.0/">
+   <permits rdf:resource="http://web.resource.org/cc/Reproduction" />
+   <permits rdf:resource="http://web.resource.org/cc/Distribution" />
+   <requires rdf:resource="http://web.resource.org/cc/Notice" />
+   <requires rdf:resource="http://web.resource.org/cc/Attribution" />
+   <permits rdf:resource="http://web.resource.org/cc/DerivativeWorks" />
+</License>
+
+</rdf:RDF>
+
+-->
+', 'This page is licensed under a <a href="%source_url">Creative Commons License</a>.', 'http://creativecommons.org/licenses/by-nc-sa/2.0/', 'http://creativecommons.org/images/public/somerights20.gif');
+
+INSERT INTO copyrights (cpyid, name, description, site_notice, node_notice, source_url, image_url) 
+VALUES (4, 'Creative Commons BY', 'Creative Commons Attribution License', 'Except where otherwise noted, this work is licensed under a <a href="%source_url">Creative Commons License</a>.
+<!--
+
+<rdf:RDF xmlns="http://web.resource.org/cc/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<Work rdf:about="">
+   <dc:type rdf:resource="http://purl.org/dc/dcmitype/Text" />
+   <license rdf:resource="http://creativecommons.org/licenses/by/2.0/" />
+</Work>
+
+<License rdf:about="http://creativecommons.org/licenses/by/2.0/">
+   <permits rdf:resource="http://web.resource.org/cc/Reproduction" />
+   <permits rdf:resource="http://web.resource.org/cc/Distribution" />
+   <requires rdf:resource="http://web.resource.org/cc/Notice" />
+   <requires rdf:resource="http://web.resource.org/cc/Attribution" />
+   <permits rdf:resource="http://web.resource.org/cc/DerivativeWorks" />
+</License>
+
+</rdf:RDF>
+
+-->
+', 'This page is licensed under a <a href="%source_url">Creative Commons License</a>.', 'http://creativecommons.org/licenses/by/2.0/', 'http://creativecommons.org/images/public/somerights20.gif');
+
+INSERT INTO copyrights (cpyid, name, description, site_notice, node_notice, source_url) 
+VALUES (5, 'GNU FDL', 'GNU Free Documentation License', 'Copyright (c)  %year %site<br/>
+Permission is granted to copy, distribute and/or modify the content of<br/>
+this site (except where otherwise noted) under the terms of the GNU Free<br/>
+Documentation License, Version 1.2 or any later version published by the<br/>
+Free Software Foundation; with no Invariant Sections, no Front-Cover Texts, <br/>
+and no Back-Cover Texts.  A copy of the license is available at <br/>
+<a href="%source_url">%source_url</a>',
+'Copyright (c)  %year %author<br/>
+Permission is granted to copy, distribute and/or modify the content of<br/>
+this page under the terms of the GNU Free Documentation License, Version 1.2<br/>
+or any later version published by the Free Software Foundation; with no <br/>
+Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.<br/>
+A copy of the license is available at <a href="%source_url">%source_url</a>',
+'http://www.gnu.org/licenses/fdl.html');
+

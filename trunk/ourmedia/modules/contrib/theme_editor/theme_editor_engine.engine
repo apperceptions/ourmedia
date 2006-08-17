@@ -1,0 +1,49 @@
+<?php
+
+function theme_editor_engine_init($theme) {
+  global $theme_engine;
+
+  $real_engines = variable_get('theme_editor_engine_real_engines', array());
+  include_once($real_engines[$theme->filename]);
+  $theme_engine = basename($real_engines[$theme->filename], '.engine');
+  if (function_exists($theme_engine .'_init')) {
+    call_user_func($theme_engine .'_init', $theme);
+  }
+}
+  
+function theme_editor_engine_features() {
+  $key = str_replace('.', '/', arg(3));
+  $themes = system_theme_data('themes');
+  $real_engines = variable_get('theme_editor_engine_real_engines', array());
+  $prefix =  basename($real_engines[$themes[$key]->filename], '.engine');
+  return function_exists($prefix .'_features') ? call_user_func($prefix .'_features') : array();
+}
+  
+function theme_editor_engine_settings() {
+  $key = str_replace('.', '/', arg(3));
+  $themes = system_theme_data('themes');
+  $real_engines = variable_get('theme_editor_engine_real_engines', array());
+  $prefix =  basename($real_engines[$themes[$key]->filename], '.engine');
+  return function_exists($prefix .'_settings') ? call_user_func($prefix .'_settings') : '';
+}
+
+function theme_editor_engine_templates($directory) {
+  $theme_editor_directory = file_create_path(variable_get('theme_editor_path', 'theme_editor'));
+  //$engines = system_theme_engine_inventory('themes');
+  $engines = list_theme_engines();
+  $template_files = array();
+  $real_engines = array();
+  foreach ($engines as $engine) {
+    if ($engine->name != 'theme_editor_engine') {
+      foreach (call_user_func($engine->name .'_templates', $theme_editor_directory) as $template) {
+        $template_files[$template->filename] = $template;
+        $template_files[$template->filename]->engine = $engine->filename;
+        $real_engines[$template->filename] = $engine->filename;
+      }
+    }
+  }
+  variable_set('theme_editor_engine_real_engines', $real_engines);
+  return $template_files;
+}
+
+?>

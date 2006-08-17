@@ -1,0 +1,7 @@
+CREATE TABLE buddylist (
+  uid int(10) UNSIGNED NOT NULL,
+  buddy int(10) UNSIGNED NOT NULL,
+  timestamp int(11) NOT NULL,
+  PRIMARY KEY (uid, buddy)
+);
+ALTER TABLE buddylist ADD received tinyint(1) NOT NULL;

@@ -1,0 +1,299 @@
+<?php
+// $Id: facewall.module,v 1.5 2005/4/14 03:30:03 Naresh Pal Singh $
+
+$column = 25;  // global variable define the number of users display in one row. 
+$imagewidth = 80;  // global variable define the width of image.
+$imageheight = 85;  // global variable define the height of image.
+$picturefield = 0;  // global variable determine the pregence of image.
+
+function facewall_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+    return t('Enables to see the facewall of all users.');
+    break;
+  }
+}
+
+function facewall_settings() {
+  $rowno = array();
+  for($i = 1;$i <= 100;$i++)
+  {
+    $rowno[] = $i; 
+  }
+  $colno = array();
+  for($i = 1;$i <= 5;$i++) {
+    $colno[] = $i; 
+  }
+  $output = form_select(t("Set the Role"), "facewall_roles", variable_get("facewall_roles", array()), user_roles(1), t("Select roles to show in the facewall listing."), FALSE ,FALSE);  
+  $output .= form_select(t("Field to show"), "facewall_fields", variable_get("facewall_fields", facewall_fields_show()), facewall_fields_show(), t("Select the fields which should be displayed on your facewall overview page. Note that some fields require certain modules to be active."), 0, 1);
+  $output .= form_select(t("Enter the Number of Rows you want to show in Facewall at a time"), "facewall_row", variable_get("facewall_row", array()), $rowno, t("Select the number of Rows's you want to display in your facewall."), FALSE, FALSE);
+  $output .= form_select(t("Enter the Number of columns you want to show in Facewall at a time"), "facewall_col", variable_get("facewall_col", array()), $colno, t("Select the number of column's you want to display in your facewall."), FALSE, FALSE);
+  $output .= "<h3>Parameters for Facewall Image</h3>";
+  $output .= form_select(t("Enter the Width of Facewall Image"), "facewallimage_width", variable_get("facewallimage_width", array()), $rowno, t("Select the Width for Facewall Image."), FALSE, FALSE);
+  $output .= form_select(t("Enter the Height of Facewall Image"), "facewallimage_height", variable_get("facewallimage_height", array()), $rowno, t("Select the Height for Facewall Image."), FALSE, FALSE);
+  
+  return $output;
+}
+
+function facewall_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array('path' => 'facewall',
+                     'title' => t("facewall"),
+                     'callback' => "facewall_page",
+                     'access' => user_access("access facewall list"),
+                     'type' => MENU_MODIFIABLE_BY_ADMIN );
+  }
+  
+  return $items;
+}
+
+function facewall_perm() {
+  return array("access facewall list");
+}
+
+/*
+ * This is the main function responsible for the display of facewall.
+ *
+ * @param $alpha
+ *   Variable use in sql query.
+ */
+function facewall_page($alpha = 'all') {
+  global $column;
+  global $picturefield;
+
+  if (user_access("access facewall list")) {	
+    $output = '<center>';
+    $output .= '<h2>Facewall of all users</h2>';
+    $loop = ord(A);
+
+    for($i = 0;$i <= 25;$i++) {
+      $loopchar = chr($loop);
+      if ($alpha == $loopchar) {
+        $output .= "<b>$loopchar</b>";  
+      }
+      else {
+        $output .= l("$loopchar","facewall/$loopchar");
+      }
+      $output .= '&nbsp&nbsp';
+      $loop = $loop + 1;
+    }
+    if ($alpha == 'all') {
+        $output .= "<b>ALL</b>"."<br><br>";  
+    }
+    else {
+      $output .= ' &nbsp;'.l("ALL","facewall/all")."<br><br>";
+    }
+    $roles = variable_get("facewall_roles", array());
+    if ($roles) {
+      $role_id = $roles[0];			
+      $fields = array();
+      $enabled_fields = variable_get("facewall_fields", facewall_fields_show());
+      foreach (facewall_fields_show() as $field => $data) {
+        if (in_array($field, $enabled_fields)) {
+          $fields[$field] = $data;
+        }
+      }
+      // We have increased the value of facewall_row and facewall_col by 1 because we are starting their values from 1.  
+      $rows_to_show = variable_get("facewall_row", array()) +1;
+      $col_to_show = variable_get("facewall_col", array()) +1;
+      $noofusers = $rows_to_show * $col_to_show;
+      $column = 100/$col_to_show;
+
+      if($alpha == 'all') {
+        $result = pager_query("SELECT DISTINCT(u.uid) FROM {users} u INNER JOIN {users_roles} r ON u.uid=r.uid WHERE (u.status=1 AND r.rid=$role_id) ORDER BY u.uid", $noofusers);
+      }
+      else {
+        $result = pager_query("SELECT DISTINCT(u.uid) FROM {users} u INNER JOIN {users_roles} r ON u.uid=r.uid WHERE (u.status=1 AND u.name like'$alpha%' AND r.rid=$role_id) ORDER BY u.uid", $noofusers);
+      }
+
+      while ($userid = db_fetch_object($result)) 
+      {
+        $account = user_load(array('uid' => $userid->uid));
+        $row = array();
+        foreach ($fields as $field => $title) {
+          $data = NULL;
+          if ($field == 'picture') { 	
+            $picturefield = 1; $data = facewall_user_picture($account); 
+          }
+          if ($picturefield == 0) {
+            $data = facewall_user_picture($account);
+          }
+          $row[] = array('data' => $data);
+        }
+        $rows[] = $row;
+      }
+      if ($pager = theme("pager", NULL, $noofusers, 0)) {
+        $rows[] = array(array("data" => $pager));
+      }
+      $output .= facewall_table( $rows) ;
+      print theme("page", $output);
+    }
+    else 
+    {
+      print theme("page", t("Warning: there aren't any users with roles configured to be shown here."));
+    }
+  }
+}
+
+/*
+ * This function is use to display the field in form selection of fields.
+ */
+function facewall_fields_show() {
+  $output = array();
+  $output['picture'] = t('Picture');
+  $output['name'] = t('Username');
+  
+  return $output;
+}
+
+function facewall_user_picture($account) {
+  if (variable_get('user_pictures', 0)) {
+    if ($account->picture && file_exists($account->picture)) {
+      $picture = file_create_url($account->picture);
+    }
+    else if (variable_get('user_picture_default', '')) {
+      $picture = variable_get('user_picture_default', '');
+    }
+    
+    if ($picture) {
+      $alt1 = $account->name;
+      $alt = t('%user\'s picture', array('%user' => $account->name ? $account->name : variable_get('anonymous', 'Anonymous')));
+      $picture = facewall_image($picture, $alt, $alt1, '', false,$account);
+
+      return $picture;
+    }
+  } 
+}
+
+function facewall_image($path, $alt = '', $title = '', $attr = '', $getsize = true,$account) {
+  global $column;
+  global $imagewidth;
+  global $imagheight;
+  global $picturefield;
+
+  $username = facewall_check_name();
+  $imagewidth = variable_get("facewallimage_width", array());
+  $imageheight = variable_get("facewallimage_height", array());
+  $attr = $account->name;
+
+  $picture_link = '';
+  if($picturefield == 1) {
+    $picture_link = l("<img src=\"$path\" width=\"$imagewidth\" height=\"$imageheight\" $attr alt=\"$alt\" title=\"$title\" />", "user/$account->uid");
+  }
+  $name_link = '';
+  if($username == 1) {
+    $name_link = l("$title", "user/$account->uid");
+  }
+  
+  return "<div style=\"float:left; width:$column%\"> <div> $picture_link</div> <div> $name_link</div> </div>";
+} 
+
+function facewall_table($rows, $attributes = NULL) {
+
+  if (is_array($rows)) {
+    foreach ($rows as $number => $row) 
+    {
+      // Check if we're dealing with a simple or complex row    
+      $cells = $row;
+      foreach ($cells as $cell) {
+        $output .= facewall_table_cell($cell, 0);
+      }
+    }
+  }
+
+  return $output;
+}
+
+function facewall_table_cell($cell, $header = 0) {
+  $attributes = '';
+
+  if (is_array($cell)) {
+    $data = $cell['data'];
+    foreach ($cell as $key => $value) {
+      if ($key != 'data') {
+        $attributes .= " $key=\"$value\"";
+      }
+    }
+  }
+  else {
+    $data = $cell;
+  }
+
+  return $data;
+} 
+
+/*
+ * This function is use to check the name field.
+ */
+function facewall_check_name()
+{
+  $enabled_fields = variable_get("facewall_fields", facewall_fields_show());
+  foreach (facewall_fields_show() as $field => $data) {
+    if (in_array($field, $enabled_fields)) {
+      $fields[$field] = $data;
+    }
+  }
+  foreach ($fields as $field => $data) {
+    if (stristr($field, 'name')) {
+      return(1);
+    }
+  }
+  return(0);
+}
+
+
+/*
+ * We can pass an array of user ids to this function and this function will return the Facewall of those users.
+ *
+ * @param $userid_array
+ *   Array contains the user id 
+ */
+function facewall_get_wall($usreid_array) {	
+  foreach ($userid_array as $userid ) {
+    $account = user_load(array('uid' => $userid));
+    $output .= facewall_user_picture($account);
+  }
+
+  return $output;	
+}
+
+/*
+ * We can pass a sql query of user id and a limit variable for pager to this function and this function will return the Facewall of that users.
+ *
+ * @param $query
+ *   Variable contain the sql query which is used to select the user id from database.
+ * @param $limit
+ *   Limit define the number of users that are displayed in one page.
+ */
+function facewall_by_sql($query, $limit) {
+  $fields = array();
+  $enabled_fields = variable_get("facewall_fields", facewall_fields_show());
+  foreach (facewall_fields_show() as $field => $data) {
+    if (in_array($field, $enabled_fields)) {
+      $fields[$field] = $data;
+    }
+  }
+      	
+  $result = pager_query($query, $limit);
+  while ($userid = db_fetch_object($result)) {
+    $account = user_load(array('uid' => $userid->uid));
+    $row = array();
+    foreach ($fields as $field => $title) {
+      $data = NULL;          		
+      if ($field == 'picture') {
+        $data = facewall_user_picture($account);
+      }
+      $row[] = array('data' => $data);
+    }
+    $rows[] = $row;
+  }
+  if ($pager = theme("pager", NULL, $limit)) {
+    $rows[] = array(array("data" => $pager ));
+  }
+  
+  $output.= facewall_table($rows) ;
+  print theme("page", $output);	
+}
+
+?>

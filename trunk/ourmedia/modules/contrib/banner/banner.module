@@ -1,0 +1,1163 @@
+<?php
+// $Id: banner.module,v 1.41.2.2 2004/12/23 04:14:44 jeremy Exp $
+
+function banner_help($section) {
+  switch($section) {
+    case 'admin/modules#description':
+      return t('An advertising system.');
+    case 'admin/settings/banner':
+    case '#banner-user-help':
+      return t("<p>For each of your advertisements previewed above you are able to view live statistics.  The three rows below offer daily, weekly, and total statistics.  The column 'views' shows how many times your ad has been displayed to visitors of this web site.  The column 'click' shows how many times a visitor has clicked your ad and been redirected to your website.  The column '%' is what percentage of ad views result in a click-through.</p><p>It is possible to throttle your ad to prevent it from being displayed more than a certain number of times in one day.  In the 'max views' column you can enter a number in the 'day' or 'week' column, then click 'Update' below.  If you purchased your ad \"by the click-through\", the 'max clicks' column below will reflect how many click-throughs you purchased.  The 'views left' and 'clicks left' columns display how many clicks and views are left for your ad.</p><p>If you are interested in automatically receiving emails that summarize your ad's activity, put a check mark in the 'notify' column.  To receive daily emails, put a check in the 'today' row.  To receive weekly emails, put a check in the 'this week' row.  Finally, it is possible to enable or disable your ad in real time with the drop-down menu.  After making any changes, be sure to click 'Update' for the ad that you have modified.</p>");
+  }
+}
+
+function banner_perm() {
+  return array('administer banners', 'manage banners', 'show banners');
+}
+
+function banner_settings() {
+  if (!file_check_directory(file_create_path(variable_get('banner_image_path', 'banners')), FILE_CREATE_DIRECTORY)) {
+    $error = theme('error', t('The image directory does not exist, or is not writable.  The banner module will not work until you resolve this error.'));
+  }
+
+  $mail_variables = ' %username, %bannername, %sitename, %day_views, %day_clicks, %week_views, %week_clicks, %total_views, %total_clicks, %url, %expire';
+  
+  $group = form_textfield(t('Banner image path'), 'banner_image_path', variable_get('banner_image_path', 'banners'), 45, 255, t('Subdirectory in the directory "%dir" where banner images will be stored.', array('%dir' => variable_get('file_directory_path', 'files') . '/')) . $error);
+  $output = form_group(t('Images'), $group);
+
+  $group = form_select(t('Cache handler'), 'banner_cache', variable_get('banner_cache', '0'), array('no cache (db)', 'file'), t('Choose a cache handler. No caching has horrible performance but works always. File caching needs write permissions for apache user to misc/ directory.'));
+  $group .= form_textfield(t('Cache key'), 'banner_cache_key', variable_get('banner_cache_key', '1'), 5, 5, t('Cache key for this site: it must be an unique numeric value.'));
+  $output .= form_group(t('Cache settings'), $group);
+
+  $group = form_textarea(t('Body of daily notification e-mail'), 'daily_notify_message_text', variable_get('daily_notify_message_text', _banner_mail_text('daily_notify')), 70, 10, t('Customize the body of the daily notification e-mail, only sent to banner owners when they enable daily notification.') . ' ' . t('Available variables are:') . $mail_variables);
+  $group .= form_textarea(t('Body of weekly notification e-mail'), 'weekly_notify_message_text', variable_get('weekly_notify_message_text', _banner_mail_text('weekly_notify')), 70, 10, t('Customize the body of the weekly notification e-mail, only sent to banner owners when they enable weekly notification.') . ' ' . t('Available variables are:') . $mail_variables);
+  $group .= form_select(t('Disable notifications to user after how many failed mail attempts'), 'banner_failed_notify', variable_get('banner_failed_notify', 5), array(t('Disabled'), 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20));
+  $output .= form_group(t('User notification settings'), $group);
+
+  $group = form_select(t('Automatic renewal reminder'), 'banner_renewal', variable_get('banner_renewal', '0'), array(t('Disabled'), t('Enabled')), t('If enabled, an automatic reminder can be emailed when an advertisement is about to expire.  This email can remind your customers that they need to renew their advertisement on your site.'));
+  $period = array(86400 => format_interval(86400), 172800 => format_interval(172800), 259200 => format_interval(259200), 345600 => format_interval(345600), 432000 => format_interval(432000), 604800 => format_interval(604800), 1209600 => format_interval(1209600), 1814400 => format_interval(1814400), 2419200 => format_interval(2419200), 4838400 => format_interval(4838400), 7257600 => format_interval(7257600), 9676800 => format_interval(9676800));
+  $group .= form_select(t('Send reminder'), 'banner_renewal_time', variable_get('banner_renewal_time', '0'), $period, t('Send the renewal reminder this long before the advertisement expires.'));
+  $group .= form_textarea(t('Body of renewal reminder e-mail'), 'renewal_message_text', variable_get('renewal_message_text', _banner_mail_text('renewal')), 70, 10, t('Customize the body of the renewal reminder e-mail, only sent once to banner owners when their ad is about to expire.') . ' ' . t('Available variables are:') . $mail_variables);
+  $output .= form_group(t('Renewal reminder settings'), $group);
+
+  return $output;
+}
+
+/**
+ * implementation of hook_menu()
+ */
+function banner_menu($may_cache) {
+  $items = array();
+
+  $manage_access = user_access('manage banners');
+  $admin_access = user_access('administer banners');
+  $view_access = user_access('show banners');
+
+  if ($may_cache) {
+
+    // Callbacks
+    $items[] = array('path' => 'banner',
+                     'title' => t('banners'),
+                     'callback' => 'banner_page',
+                     'type' => MENU_CALLBACK,
+                     'access' => $view_access);
+
+    // Menu items
+    $items[] = array('path' => 'banners',
+                     'title' => t('my banners'),
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view',
+                     'access' => $manage_access);
+
+    $items[] = array('path' => 'admin/banner',
+                     'title' => t('banners'),
+                     'callback' => 'banner_admin',
+                     'callback arguments' => 'list',
+                     'access' => $admin_access);
+
+    // Tabs
+    $items[] = array('path' => 'banners/view',
+                     'title' => t('view'),
+                     'type' => MENU_DEFAULT_LOCAL_TASK,
+                     'access' => $manage_access,
+                     'weight' => -10);
+    $items[] = array('path' => 'banners/add',
+                     'title' => t('add'),
+                     'type' => MENU_LOCAL_TASK,
+                     'access' => $manage_access,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user add');
+
+
+    $items[] = array('path' => 'admin/banner/list',
+                     'title' => t('list'),
+                     'type' => MENU_DEFAULT_LOCAL_TASK,
+                     'access' => $admin_access,
+                     'weight' => -10);
+    $items[] = array('path' => 'admin/banner/add',
+                     'title' => t('add'),
+                     'type' => MENU_LOCAL_TASK,
+                     'access' => $admin_access,
+                     'callback' => 'banner_admin',
+                     'callback arguments' => 'add');
+    $items[] = array('path' => 'admin/banner/refresh',
+                     'title' => t('refresh cache'),
+                     'type' => MENU_LOCAL_TASK,
+                     'access' => $admin_access,
+                     'callback' => 'banner_admin',
+                     'callback arguments' => 'refresh');
+
+
+    // Subtabs
+    $items[] = array('path' => 'banners/view/user',
+                     'title' => t('mine'),
+                     'type' => MENU_DEFAULT_LOCAL_TASK,
+                     'access' => $manage_access,
+                     'weight' => -10);
+
+    $items[] = array('path' => 'banners/view/all',
+                     'title' => t('all'),
+                     'type' => MENU_LOCAL_TASK,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view all',
+                     'access' => $admin_access,
+                     'weight' => -8);
+    $items[] = array('path' => 'banners/view/active',
+                     'title' => t('active'),
+                     'type' => MENU_LOCAL_TASK,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view active',
+                     'access' => $admin_access,
+                     'weight' => -6);
+    $items[] = array('path' => 'banners/view/enabled',
+                     'title' => t('enabled'),
+                     'type' => MENU_LOCAL_TASK,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view enabled',
+                     'access' => $admin_access,
+                     'weight' => -4);
+    $items[] = array('path' => 'banners/view/pending',
+                     'title' => t('pending'),
+                     'type' => MENU_LOCAL_TASK,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view pending',
+                     'access' => $admin_access,
+                     'weight' => -2);
+    $items[] = array('path' => 'banners/view/blocked',
+                     'title' => t('blocked'),
+                     'type' => MENU_LOCAL_TASK,
+                     'callback' => 'banner_page',
+                     'callback arguments' => 'user view blocked',
+                     'access' => $admin_access);
+  }
+  else {
+    if (arg(0) == 'admin' && is_numeric(arg(2))) {
+      $items[] = array('path' => 'admin/banner/' . arg(2),
+                       'title' => t('banner'),
+                       'type' => MENU_LOCAL_TASK,
+                       'callback' => 'banner_admin',
+                       'callback arguments' => 'view ' . arg(2),
+                       'access' => $admin_access,
+                       'weight' => 10);
+      $items[] = array('path' => 'admin/banner/' . arg(2) . '/edit',
+                       'title' => t('edit'),
+                       'type' => MENU_LOCAL_TASK,
+                       'access' => $admin_access,
+                       'callback' => 'banner_admin',
+                       'callback arguments' => 'edit ' . arg(2));
+      $items[] = array('path' => 'admin/banner/' . arg(2) . '/view',
+                       'title' => t('view'),
+                       'type' => MENU_DEFAULT_LOCAL_TASK,
+                       'access' => $admin_access,
+                       'callback' => 'banner_admin',
+                       'callback arguments' => 'view ' . arg(2),
+                       'weight' => -10);
+    }
+  }
+
+  return $items;
+}
+
+
+function banner_page() {
+  global $user;
+  $edit = $_POST['edit'];
+
+  if (arg(0) == 'banners') {
+    if (arg(1) == 'add') {
+      drupal_set_title(t('upload a new banner'));
+      if (user_access('manage banners')) {
+        if ($edit) {
+          $output .= theme('box', t('Status'), banner_user_save($edit));
+  
+          # display each banner in its own box
+          $result = db_query("SELECT * FROM {banner} WHERE uid = '%d'", $user->uid);
+          while ($banner = db_fetch_object($result)) {
+            $output .= theme('box', "$banner->title", banner_user_edit($banner));
+          }
+        }
+        else {
+          $output .= theme('box', '', banner_user_add());
+        }
+      }
+      else {
+        $output .= theme('box', t('Access denied'), message_access());
+      }
+      $output .= theme('box', t('Help'), banner_help('#banner-user-help'));
+      print theme('page', $output);
+    }
+    else {
+      if (user_access('manage banners')) {
+        if ($string = banner_user_update($edit)) {
+          $output .= theme('box', t('Status'), $string);
+        }
+  
+        // display each banner in its own box
+        if (user_access('administer banners') && (arg(1) == 'view')) {
+          switch (arg(2)) {
+            case 'active':
+              $result = db_query('SELECT * FROM {banner} WHERE status = 0 OR status = 1 OR status = 2 OR status = 3 OR status = 4');
+              break;
+            case 'enabled':
+              $result = db_query('SELECT * FROM {banner} WHERE status = 1');
+              break;
+            case 'pending':
+              $result = db_query('SELECT * FROM {banner} WHERE status = 0');
+              break;
+            case 'blocked':
+              $result = db_query('SELECT * FROM {banner} WHERE status = 5');
+              break;
+            default:
+              $result = db_query('SELECT * FROM {banner}');
+          }
+        }
+        else {
+          $result = db_query("SELECT * FROM {banner} WHERE uid = '%d'", $user->uid);
+        }
+        while ($banner = db_fetch_object($result)) {
+          $output .= theme('box', "$banner->title", banner_user_edit($banner));
+        }
+      }
+      else {
+        $output .= theme('box', t('Access denied'), message_access());
+      }
+      $output .= theme('box', t('Help'), banner_help('#banner-user-help'));
+      print theme('page', $output);
+    }
+  }
+  else {
+    $id = arg(1);
+
+    $banner = db_fetch_object(db_query('SELECT * FROM {banner} WHERE id = %d', $id));
+    if ($banner) {
+      db_query('UPDATE {banner} SET clicks = clicks + 1, day_clicks = day_clicks + 1, week_clicks = week_clicks + 1 WHERE id = %d', $id);
+      if ($banner->max_clicks > 0 && ($banner->clicks + 1) == $banner->max_clicks) {
+          watchdog('special', strtr("banner: '%banner' %status, reached max of %clicks clicks.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%status' => _banner_status(5), '%clicks' => "$banner->max_clicks")));
+        // status = 5 : blocked  (set banner to 'blocked' status)
+        db_query('UPDATE {banner} SET status = 5 WHERE id = %d', $id);
+        _banner_refresh_cache();
+      }
+      // don't use drupal_goto() as we don't want to tack on session ID
+      header("Location: $banner->url");
+    }
+    exit();
+  }
+}
+
+function banner_file_download($file) {
+  if (user_access('show banners')) {
+    $path = file_create_path($file);
+    if (function_exists('mime_content_type')) {
+      if ($type =  mime_content_type($path))
+        return array("Content-type: $type");
+    }
+    // support for pre-PHP 4.3+
+    list($width, $height, $type, $attr) = getimagesize($path);
+    $types = array(
+      IMAGETYPE_GIF => 'image/gif',
+      IMAGETYPE_JPEG => 'image/jpeg',
+      IMAGETYPE_PNG => 'image/png',
+      IMAGETYPE_SWF => 'application/x-shockwave-flash',
+      IMAGETYPE_PSD => 'image/psd',
+      IMAGETYPE_BMP => 'image/bmp',
+      IMAGETYPE_TIFF_II => 'image/tiff',
+      IMAGETYPE_TIFF_MM  => 'image/tiff',
+      IMAGETYPE_JPC => 'application/octet-stream',
+      IMAGETYPE_JP2 => 'image/jp2',
+      IMAGETYPE_JPX => 'application/octet-stream',
+      IMAGETYPE_JB2 => 'application/octet-stream',
+      IMAGETYPE_SWC => 'application/x-shockwave-flash',
+      IMAGETYPE_IFF => 'image/iff',
+      IMAGETYPE_WBMP => 'image/vnd.wap.wbmp',
+      IMAGETYPE_XBM => 'image/xbm'
+    );
+    if (isset($types[$type])) {
+      return array('Content-type: '. $types[$type]);
+    }
+  }
+}
+
+
+function banner_user_edit($banner) {
+  $output = theme('banner_show', array2object($banner));
+
+  $headers = array('', t('views'), t('clicks'), '%', t('max views'), t('max clicks'), t('views left'), t('clicks left'), t('notify'), t('status'));
+
+  $row = array();
+  $row[] = t('today');
+  $row[] = $banner->day_views;
+  $row[] = $banner->day_clicks;
+  $row[] = ($banner->day_views ? sprintf('%1.2f', ($banner->day_clicks / $banner->day_views * 100)) : '0.00');
+  $row[] = form_textfield('', "dailyviews$banner->id", $banner->day_max_views, 6, 12);
+  $row[] = $banner->max_clicks;
+  $row[] = ($banner->day_max_views ? ($banner->day_max_views - $banner->day_views) : ($banner->week_max_views ? ($banner->week_max_views - $banner->week_views) : ($banner->max_views ? ($banner->max_views - $banner->views) : t('unlimited'))));
+  $row[] = ($banner->max_clicks ? ($banner->max_clicks - $banner->clicks) : t('unlimited'));
+  $row[] = form_checkbox('', "day_notify$banner->id", 1, $banner->day_notify);
+  switch ($banner->status) {
+    case '0':
+      $row[] = t('pending');
+      break;
+    case '1':
+      $row[] = t('enabled');
+      break;
+    default:
+      $row[] = t('disabled');
+      break;
+  }
+  $rows[] = $row;
+
+  $row = array();
+  $row[] = t('this week');
+  $row[] = $banner->week_views;
+  $row[] = $banner->week_clicks;
+  $row[] = ($banner->week_views ? sprintf('%1.2f', ($banner->week_clicks / $banner->week_views * 100)) : '0.00');
+  $row[] = form_textfield('', "weeklyviews$banner->id", $banner->week_max_views, 6, 12);
+  $row[] = $banner->max_clicks;
+  $row[] = ($banner->week_max_views ? ($banner->week_max_views - $banner->week_views) : ($banner->max_views ? ($banner->max_views - $banner->views) : t('unlimited')));
+  $row[] = ($banner->max_clicks ? ($banner->max_clicks - $banner->clicks) : t('unlimited'));
+  $row[] = form_checkbox('', "week_notify$banner->id", 1, $banner->week_notify);
+  switch ($banner->status) {
+    case '0':
+      $row[] = t('pending');
+      break;
+    case '1':
+    case '2':  // disabled for day doesn't make disabled for week
+      $row[] = t('enabled');
+      break;
+    default:
+      $row[] = t('disabled');
+      break;
+  }
+  $rows[] = $row;
+
+  $row = array();
+  $row[] = t('all time');
+  $row[] = $banner->views;
+  $row[] = $banner->clicks;
+  $row[] = ($banner->views ? sprintf('%1.2f', ($banner->clicks / $banner->views * 100)) : '0.00');
+  $row[] = $banner->max_views;
+  $row[] = $banner->max_clicks;
+  $row[] = ($banner->max_views ? ($banner->max_views - $banner->views) : t('unlimited'));
+  $row[] = ($banner->max_clicks ? ($banner->max_clicks - $banner->clicks) : t('unlimited'));
+  $row[] = '';
+  switch ($banner->status) {
+    case '1':
+    case '4':
+      $row[] = form_select('', "status$banner->id", $banner->status, array(1 => t('enabled'), 2 => t('disabled')));
+      break;
+    case '2':
+      $row[] = form_select('', "status$banner->id", $banner->status, array(1 => t('enabled'), 2 => t('disabled'), 5 => t('limit reached')));
+      break;
+    case '3':
+      $row[] = form_select('', "status$banner->id", $banner->status, array(1 => t('enabled'), 2 => t('disabled'), 6 => t('limit reached')));
+      break;
+    default:
+      $row[] = _banner_status($banner->status);
+      break;
+  }
+  $rows[] = $row;
+
+  $output .= theme('table', $headers, $rows);
+  if ($banner->status == 0) {
+    // new banner, awaiting administrative approval
+    $output .= t('This advertisement is waiting approval.');
+  }
+  else if ($banner->unpublish_date) {
+    // if this banner expires, provide more information
+    if (($banner->status == 1) || ($banner->status == 2) ||
+      ($banner->status == 3) || ($banner->status == 4)) {
+      $output .= t('This advertisement will be displayed until %date.', array('%date' => format_date($banner->unpublish_date, 'custom', 'M d, Y<br />')));
+    }
+    // status(5) == "blocked"
+    else if ($banner->status == 5) {
+      if (date > $banner->unpublish_date) {
+        $output .= t('This advertisement is expired.');
+      }
+    }
+  }
+  $output .= '<center>'. form_submit(t('Update')) .'</center>';
+
+  return form($output, 'POST', url("banners/$banner->id"));
+}
+
+function banner_user_update($edit) {
+  global $user;
+
+  if ($edit) {
+    // user has updated banner configuration...
+    $result = db_query("SELECT id, status, title, day_max_views, week_max_views, day_notify, week_notify FROM {banner} WHERE uid = '%d'", $user->uid);
+    $string = '';
+    while ($banner = db_fetch_object($result)) {
+      // update banner status
+      if ((isset($edit["status$banner->id"])) && ($edit["status$banner->id"] != $banner->status) && (($banner->status == 1) || ($banner->status == 2) || ($banner->status == 3) || ($banner->status == 4))) {
+        watchdog('special', strtr("banner: '%banner' %status.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%status' => (_banner_status($edit["status$banner->id"])))));
+        db_query("UPDATE {banner} SET status = '%d' where id = '%d'", $edit["status$banner->id"], $banner->id);
+      }
+      // update daily notification status
+      if (isset($edit["day_notify$banner->id"]) && ($edit["day_notify$banner->id"] != $banner->day_notify)) {
+        watchdog('special', strtr("banner: '%banner' daily notification %status.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%status' => ($edit["day_notify$banner->id"] ? t('enabled') : t('disabled')))));
+        db_query("UPDATE {banner} SET day_notify = '%d' where id = '%d'", $edit["day_notify$banner->id"], $banner->id);
+      }
+      // update weekly notification status
+      if (isset($edit["week_notify$banner->id"]) && ($edit["week_notify$banner->id"] != $banner->week_notify)) {
+        watchdog('special', strtr("banner: '%banner' weekly notification %status.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%status' => ($edit["week_notify$banner->id"] ? t('enabled') : t('disabled')))));
+        db_query("UPDATE {banner} SET week_notify = '%d' where id = '%d'", $edit["week_notify$banner->id"], $banner->id);
+      }
+      // update day_max_views
+      if (isset($edit["dailyviews$banner->id"]) && ($edit["dailyviews$banner->id"] != $banner->day_max_views)) {
+        watchdog('special', strtr("banner: '%banner' day_max_views set to '%day_max_views'.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%day_max_views' => $edit["dailyviews$banner->id"])));
+        db_query("UPDATE {banner} SET day_max_views = '%d' where id = '%d'", $edit["dailyviews$banner->id"], $banner->id);
+      }
+      // update week_max_views
+      if (isset($edit["weeklyviews$banner->id"]) && ($edit["weeklyviews$banner->id"] != $banner->week_max_views)) {
+        watchdog('special', strtr("banner: '%banner' week_max_views set to '%week_max_views'.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"), '%week_max_views' => $edit["weeklyviews$banner->id"])));
+        db_query("UPDATE {banner} SET week_max_views = '%d' where id = '%d'", $edit["weeklyviews$banner->id"], $banner->id);
+        $string .= t("Banner '%banner' updated successfully.", array('%banner' => "$banner->title")) . '<br />';
+      }
+    }
+    _banner_refresh_cache();
+    return $string;
+  }
+  return;
+}
+
+function banner_user_add() {
+  $form .= form_textfield(t('Banner title'), 'title', '', 30, 255, t("Please enter a name for this banner.  This field is only used for administrative purposes.  For example, you might enter 'banner-1'."));
+  $form .= form_textfield(t('Click-through destination URL'), 'url', '', 80, 255, t("Please enter a complete URL where users will be sent that click on your banner.  For example, you might enter 'http://example.com/'."));
+  //$form .= form_textarea(t("Comments to site administrator"), "comment", "", 80, 5, t("Use this optional field to send comments along with your banner.  The site administrator will see these comments when reviewing your banner."));
+  $form .= form_file(t('Banner file'), 'path', 40, t('Please enter the local path and filename of your banner, or click browse to locate your banner.  You can upload an image, a flash, or an html/text file.'));
+  $form .= form_checkbox(t('Notify site administrator'), 'notify', 1, 1, t('Notify the site administrator that you have uploaded a new banner.'));
+
+  $form .= form_submit(t('Upload'));
+
+  return form($form, 'post', 0, array('enctype' => 'multipart/form-data'));
+}
+
+function banner_user_save($edit) {
+  global $user, $base_url;
+
+  $fields = array('title', 'url');
+
+  _banner_handle_upload($fields, $edit);
+  
+  $fields[] = 'created';
+  $edit['created'] = time();
+  $fields[] = 'id';
+  $edit['id'] = db_next_id('banner');
+  $fields[] = 'uid';
+  $edit['uid'] = $user->uid;
+
+  foreach ($fields as $field) {
+    $values[] = (string)check_query($edit[$field]);
+  }
+
+  db_query('INSERT INTO {banner} (' .implode(', ', $fields). ") VALUES ('" .implode("', '", $values). "')");
+
+  $string = t('Your new banner has been uploaded.  Please check back later to see if it has been approved.');
+
+  _banner_refresh_cache();
+
+  if ($edit['notify']) {
+    $subject = t('[%sitename] New banner uploaded', array('%sitename' => variable_get('site_name', 'drupal')));
+    $admin = user_load(array('uid' => 1));
+    $to = $admin->mail;
+    $from = variable_get('site_mail', ini_get('sendmail_from'));
+    $headers = "From: $from\nReply-to: $from\nX-Mailer: Drupal\nReturn-path: <$from>\nErrors-to: $from\n";
+    $variables = array('%admin' => $admin->name, '%sitename' => variable_get('site_name', 'drupal'), '%username' => $user->name, '%bannername' => $edit['title'], '%pending_url' => "$base_url/banners/view/all/pending");
+    // TODO:  Error checking/handling
+    user_mail($to, $subject, wordwrap(strtr(_banner_mail_text('upload_notify'), $variables), 72), $headers);
+  }
+
+  return $string;
+}
+
+function banner_cron() {
+  // Queue up notifications, do them at the very end
+  $notification[] = array();
+
+  // reset 1 day counters (1 day minus 5 minutes to prevent loosing an hour)
+  if ((time() - variable_get('banner_timestamp_day', '0')) >= 86100) {
+    variable_set('banner_timestamp_day', time());
+    $param[reset_day_counters] = 1;
+
+    // add notification emails to the queue
+    $result = db_query('SELECT title, day_views, week_views, views, day_clicks, week_clicks, clicks, uid, unpublish_date, failed_notify, id FROM {banner} WHERE day_notify = 1 AND status < 4');
+    while ($banner = db_fetch_object($result)) {
+      $notification['subject'][] = variable_get('site_name', 'drupal') . ':' . t("'%banner' banner daily notification", array('%banner' => "$banner->title"));
+      $notification['message'][] = variable_get("daily_notify_message_text", _banner_mail_text('daily_notify'));
+      $notification['banner'][] = $banner;
+    }
+
+    if (variable_get('banner_renewal', 0)) {
+      // add renewal reminder emails to the queue
+      $result = db_query('SELECT title, day_views, week_views, views, day_clicks, week_clicks, clicks, uid, unpublish_date, failed_notify, id FROM {banner} WHERE reminder_sent = 0 AND unpublish_date <= %d AND (status = 1 OR status = 2 OR status = 3 OR status = 4)', (time() + variable_get('banner_renewal_time', 0)));
+      while ($banner = db_fetch_object($result)) {
+        $notification['subject'][] = variable_get('site_name', 'drupal') . ': ' . t("'%banner' banner expiring soon", array('%banner' => "$banner->title"));
+        $notification['message'][] = variable_get('renewal_message_text', _banner_mail_text('renewal'));
+        $notification['banner'][] = $banner;
+        db_query('UPDATE {banner} SET reminder_sent = 1 WHERE id = '. $banner->id);
+      }
+    }
+  }
+
+  // reset 7 day counters (1 week minus 5 minutes to prevent loosing an hour)
+  if ((time() - variable_get('banner_timestamp_week', '0')) >= 604500) {
+    variable_set('banner_timestamp_week', time());
+    $param[reset_week_counters] = 1;
+
+    // add notification emails to the queue
+    $result = db_query('SELECT title, day_views, week_views, views, day_clicks, week_clicks, clicks, uid, unpublish_date, id FROM {banner} WHERE week_notify = 1 AND status < 4');
+    while ($banner = db_fetch_object($result)) {
+      $notification['subject'][] = variable_get('site_name', 'drupal') . ': ' . t("'%banner' banner weekly notification", array('%banner' => "$banner->title"));
+      $notification['message'][] = variable_get('weekly_notify_message_text', _banner_mail_text('weekly_notify'));
+      $notification['banner'][] = $banner;
+    }
+  }
+
+  // limit general cron functionality to once every 5 minutes
+  if ((time() - variable_get('banner_timestamp_gc', '0')) >= 300) {
+    variable_set('banner_timestamp_gc', time());
+    $param[refresh_cache] = true;
+
+    $result = db_query('SELECT title, unpublish_date, publish_date, id FROM {banner}');
+    while ($banner = db_fetch_object($result)) {
+      if (($banner->unpublish_date) && ($banner->unpublish_date < time())) {
+        watchdog('special', strtr("banner: '%banner' automatically unpublished.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"))));
+        db_query('UPDATE {banner} SET unpublish_date = 0, status = 5 WHERE id = '. $banner->id);
+      }
+      else if (($banner->publish_date) && ($banner->publish_date < time())) {
+        watchdog('special', strtr("banner: '%banner' automatically published.", array('%banner' => l("$banner->title", "admin/banner/edit/$banner->id"))));
+        db_query('UPDATE {banner} SET publish_date = 0, status = 1 WHERE id = '. $banner->id);
+      }
+    }
+  }
+
+  // reset counters, if need be
+  if (isset($param)) {
+    _banner_refresh_cache( $param );
+  }
+
+  // lastly, generate notification emails, if any
+  $j = sizeof($notification);
+  for ($i=0; $i<=$j; $i++) {
+    if ($notification['subject'][$i] && $notification['message'][$i] && $notification['banner'][$i]) {
+      banner_mail( $notification['subject'][$i], $notification['message'][$i], $notification['banner'][$i]);
+    }
+  }
+}
+
+function banner_mail( $subject, $message, $banner ) {
+  global $base_url;
+  if (isset($banner->uid)) {
+    $user = user_load(array('uid' => $banner->uid));
+    $to = $user->mail;
+    $from = variable_get('site_mail', ini_get('sendmail_from'));
+    $headers = "From: $from\nReply-to: $from\nX-Mailer: Drupal\nReturn-path: <$from>\nErrors-to: $from\n";
+  
+    $variables = array('%username' => $user->name, '%bannername' => $banner->title, '%sitename' => variable_get('site_name', 'drupal'), '%day_views' => $banner->day_views, '%day_clicks' => $banner->day_clicks, '%week_views' => $banner->week_views, '%week_clicks' => $banner->week_clicks, '%total_views' => $banner->views, '%total_clicks' => $banner->clicks, '%url' => "$base_url/banners/", '%expire' => (($banner->unpublish_date > 0 ) ? format_date($banner->unpublish_date, 'custom', 'M d, Y') : t('never')));
+  
+    // use user.module mail function to actually send the mail
+    if (!user_mail($to, $subject, wordwrap(strtr($message, $variables), 72), $headers)) {
+      // mail notification failed
+      $failed_notify = variable_get('banner_failed_notify', 5);
+      if (($failed_notify) && (($banner->failed_notify + 1) > $failed_notify)) {
+        // too many notifications failures, disabling user's notification
+        db_query('UPDATE {banner} SET daily_notify = 0, weekly_notify = 0 WHERE id = %d', $banner->id);
+      }
+      else {
+        // incrementing notification failures counter
+        db_query('UPDATE {banner} SET failed_notify = failed_notify + 1 WHERE id = %d', $banner->id);
+      }
+    }
+    elseif ($banner->failed_notify) {
+      // mail notification succeeded, zero out previous failed attempts counter
+      db_query('UPDATE {banner} SET failed_notify = 0 WHERE uid = %d', $user->uid);
+    }
+  }
+}
+
+function banner_admin() {
+
+  $op = $_POST['op'];
+  if (!$op && arg(2)) {
+    if (is_numeric(arg(2))) {
+      $id = arg(2);
+      $op = arg(3);
+      !$op && $op = 'view';
+    }
+    else {
+      $id = arg(3);
+      $op = arg(2);
+    }
+  }
+  $edit = $_POST['edit'];
+
+  $output = '';
+  if (user_access('administer banners')) {
+    switch ($op) {
+      case 'add':
+        $output = banner_form();
+        break;
+      case 'edit':
+        $output = banner_form(db_fetch_array(db_query('SELECT * FROM {banner} WHERE id = %d', $id)));
+        break;
+      case 'view':
+        $output = banner_admin_view(db_fetch_object(db_query('SELECT * from {banner} WHERE id = %d', $id)));
+        break;
+      case t('Save'):
+        banner_save($edit);
+        drupal_goto('admin/banner');
+        break;
+      case t('Delete'):
+        banner_delete($edit);
+        drupal_goto('admin/banner');
+        break;
+      case 'refresh':
+        _banner_refresh_cache();
+        drupal_set_message(t('Cache refreshed.'));
+        drupal_goto('admin/banner');
+        break;
+      default:
+        $output = banner_overview();
+        break;
+    }
+    print theme('page', $output);
+  }
+  else {
+    print theme('page', message_access());
+  }
+}
+
+function banner_admin_view($banner = NULL) {
+  if ($banner->id) {
+
+    $output = theme('banner_show', $banner). "<br />\n";
+    $output .= "($banner->format)\n";
+    $output .= '<h3>'. t('Overview') .":</h3>\n";
+    $headers = array(
+                 array('data' => t('title')),
+                 array('data' => t('owner')),
+                 array('data' => t('status')),
+                 array('data' => t('group')),
+                 array('data' => t('link')),
+                 array('data' => t('created')),
+                 );
+    $owner = user_load(array('uid' => $banner->uid));
+    $row = array(array(
+             $banner->title,
+             $owner->name,
+             _banner_status($banner->status),
+             $banner->position,
+             $banner->url,
+             format_date($banner->created, 'small')
+           ));
+    $output .= theme('table', $headers, $row);
+    if($banner->publish_date) {
+      $output .= '<h4>' .t('This banner will be auto-enabled on %date', array('%date' => format_date($banner->publish_date, 'small'))) ."</h4>\n";
+    }
+    if($banner->unpublish_date) {
+      $output .= '<h4>' .t('This banner will be auto-blocked on %date', array('%date' => format_date($banner->unpublish_date, 'small'))) ."</h4>\n";
+    }
+
+    $output .= '<h3>'. t('Notifications') ."</h3>\n";
+    $notifications = '';
+    if($banner->day_notify) {
+      $notifications .= '<h4>'. t("A daily notification email is sent to '%owner'.", array('%owner' => $owner->name)) ."</h4>\n";
+    }
+    if($banner->week_notify) {
+      $notifications .= '<h4>'. t("A weekly notification email is sent to '%owner'.", array('%owner' => $owner->name)) ."</h4>\n";
+    }
+    if($banner->failed_notify) {
+      $notifications .= '<h4>'. t('There %failed.', array('%failed' => format_plural($banner->failed_notify, 'has been 1 failed notification attempt', 'have been %count failed notification attempts'))) ."</h4>\n";
+    }
+    if($banner->reminder_sent) {
+      $notifications .= '<h4>'. t("A renewal reminder has already been sent to '%name'", array('%name' => $owner->name)) ."</h4>\n";
+    }
+    if ($notifications) {
+      $output .= $notifications;
+    } 
+    else {
+      $output .= t('[none]');
+    }
+
+    $output .= '<h3>'. t('Statistics') .":</h3>\n";
+
+    $output .= '<h4>'. t('Today') ."</h4>\n";
+    $headers = array(t('views'), t('clicks'), t('%'), t('max views'));
+    $row = array(array(
+             array('data' => $banner->day_views, 'align' => 'center'),
+             array('data' => $banner->day_clicks, 'align' => 'center'),
+             array('data' => $banner->day_views ? sprintf('%1.2f', ($banner->day_clicks / $banner->day_views * 100)) : '0.00', 'align' => 'center'),
+             array('data' => $banner->day_max_views, 'align' => 'center'),
+           ));
+    $output .= theme('table', $headers, $row);
+
+    $output .= '<h4>'. t('This week') ."</h4>\n";
+    $headers = array(t('views'), t('clicks'), t('%'), t('max views'));
+    $row = array(array(
+             array('data' => $banner->week_views, 'align' => 'center'),
+             array('data' => $banner->week_clicks, 'align' => 'center'),
+             array('data' => $banner->week_views ? sprintf('%1.2f', ($banner->week_clicks / $banner->week_views * 100)) : '0.00', 'align' => 'center'),
+             array('data' => $banner->week_max_views, 'align' => 'center')
+           ));
+    $output .= theme('table', $headers, $row);
+
+    $output .= '<h4>'. t('Overall') ."</h4>\n";
+    $headers = array(t('views'), t('clicks'), t('%'), t('max views'), t('max clicks'), t('chance'));
+    $row = array(array(
+             array('data' => $banner->views, 'align' => 'center'),
+             array('data' => $banner->clicks, 'align' => 'center'),
+             array('data' => $banner->views ? sprintf('%1.2f', ($banner->clicks / $banner->views * 100)) : '0.00', 'align' => 'center'),
+             array('data' => $banner->max_views, 'align' => 'center'),
+             array('data' => $banner->max_clicks, 'align' => 'center'),
+             array('data' => $banner->chance, 'align' => 'center')
+           ));
+    $output .= theme('table', $headers, $row);
+  }
+  else {
+    $output = 'No banner selected.';
+  }
+  return $output;
+}
+
+function banner_form($edit = NULL) {
+  $group = '';
+  if ($edit['id']) {
+    $group = '<div class="banner-preview">' .theme('banner_show', array2object($edit)). '</div>';
+  }
+
+  $group .= form_textfield(t('Title'), 'title', $edit['title'], 30, 255, t('A name for this banner, used in administration only. e.g.: banner-1'));
+  $group .= form_textfield(t('URL'), 'url', $edit['url'], 80, 255, t('Target URL for this banner.'));
+  $group .= form_select(t('Status'), 'status', $edit['status'], _banner_status(), t('Status of banner.  A \'pending\' banner requires administrative approval before it will be displayed.  An \'enabled\' banner is approved and actively being displayed. A \'disabled\' banner is approved but disabled by the user.  A \'blocked\' banner is approved but disabled by the admin, for example after being displayed \'max views\' times.  A \'denied\' banner was not approved by the admin.'));
+  $group .= form_textfield(t('Owner'), 'uid', $edit['uid'], 5, 10, t('Optional UID of site user that own this banner.  This user will be able to view banner statistics.'));
+  $group .= form_select(t('Group'), 'position', $edit['position'], range(0,9), t('Which group this banner belongs in.  Each group can be displayed in a different position on your web page, as defined by your theme.'));
+  $group .= form_textfield(t('Automatically publish banner'), 'publish_date', ($edit['publish_date'] ? format_date((int)$edit['publish_date']) : ''), 30, 55, t('The date at which this banner will be automatically published.  Leave empty if you don\'t want to schedule this banner, or fill out a string containing an English date format.  Example input:') . " '". date('j F Y G:i') ."', '". date('m/d/y H:i') ."', '". date('F j, Y H:i') ."', ...");
+  $group .= form_textfield(t('Automatically unpublish banner'), 'unpublish_date', ($edit['unpublish_date'] ? format_date((int)$edit['unpublish_date']) : ''), 30, 55, t('The date at which this banner will be automatically unpublished.  Leave empty if you don\'t want to schedule this banner, or fill out a string containing an English date format.  Example input:') . " '". date('j F Y G:i') ."', '". date('m/d/y H:i') ."', '". date('F j, Y H:i') ."', ...");
+  $form = $group;
+
+  $group = form_select(t('Daily notification'), 'day_notify', $edit['day_notify'], array(0 => t('disabled'), 1 => t('enabled')), t('Daily notification of banner statistics.  If enabled, the owner of this banner will receive daily notification emails summarizing banner activity.'));
+  $group .= form_select(t('Weekly notification'), 'week_notify', $edit['week_notify'], array(0 => t('disabled'), 1 => t('enabled')), t('Weekly notification of banner statistics.  If enabled, the owner of this banner will receive weekly notification emails summarizing banner activity.'));
+  $group .= form_textfield(t('Notification failures'), 'failed_notify', $edit['failed_notify'], 5, 5, t('Total number of failed notifications for this banner.'));
+  $group .= form_select(t('Reminder notification'), 'reminder_sent', $edit['reminder_sent'], array(0 => t('enabled'), 1 => t('disabled')), t('Banner expiration notification.  If enabled and properly configured, prior to this banner expiring a reminder email will be sent to the banners owner.'));
+  $form .= form_group(t('Notifications'), $group);
+
+  $group = form_textfield(t('Chance'), 'chance', ($edit['chance'] ? $edit['chance'] : 1), 5, 5, t('Chance of this banner to show, related to other banners. If a banner has chance 1 and another has chance 2, the second will show twice as much.'));
+  $group .= form_textfield(t('Maximum total clicks'), 'max_clicks', $edit['max_clicks'], 15, 15, t('Maximum number of clicks this banner can have. After this the banner will be automatically blocked. Set to 0 to allow for unlimited clicks.'));
+  $group .= form_textfield(t('Maximum total views'), 'max_views', $edit['max_views'], 15, 15, t('Maximum number of views this banner can have. After this the banner will be automatically blocked. Set to 0 to allow for unlimited views.'));
+  $group .= form_textfield(t('Maximum weekly views'), 'week_max_views', $edit['week_max_views'], 15, 15, t('Maximum number of weekly views this banner can have. After this the banner will be automatically disabled. Set to 0 to allow for unlimited weekly views.'));
+  $group .= form_textfield(t('Maximum daily views'), 'day_max_views', $edit['day_max_views'], 15, 15, t('Maximum number of daily views this banner can have. After this the banner will be automatically disabled. Set to 0 to allow for unlimited daily views.'));
+  $headers = array('', t('views'), t('clicks'), t('reset'));
+  $rows = array();
+  $rows[] = array(
+              array('data' => t('today'), 'align' => 'left'), 
+              array('data' => $edit['day_views'], 'align' => 'center'),
+              array('data' => $edit['day_clicks'], 'align' => 'center'),
+              array('data' => form_checkbox('', 'reset_day'), 'align' => 'center'),
+             );
+  $rows[] = array(
+              array('data' => t('this week'), 'align' => 'left'), 
+              array('data' => $edit['week_views'], 'align' => 'center'),
+              array('data' => $edit['week_clicks'], 'align' => 'center'),
+              array('data' => form_checkbox('', 'reset_week'), 'align' => 'center'),
+             );
+  $rows[] = array(
+              array('data' => t('total'), 'align' => 'left'), 
+              array('data' => $edit['views'], 'align' => 'center'),
+              array('data' => $edit['clicks'], 'align' => 'center'),
+              array('data' => form_checkbox('', 'reset_total'), 'align' => 'center'),
+             );
+  $group .= theme('table', $headers, $rows);
+  $group .= '<div class="form-item"><div class="description">'. t('You can reset all values in one or more of the above rows by checking the appropriate checkbox(es) then clicking \'Save\' below.  CAUTION:  This can not be undone.  Once you check \'reset\' and then click \'Save\' below you will not be able to restore the previous values.') .'</div></div>';
+  $form .= form_group(t('Statistics'), $group);
+
+  $group = form_file(t('Banner file'), 'path', 40, t('The file to use for this banner.  You can upload an image, a flash or an html/txt file.  If you are editing the banner you don\'t need to re-upload the image.'));
+  if ($edit['format']) {
+    if (!in_array($edit['format'], _banner_supported_mime_types())) {
+      $edit['format'] = t('unsupported');
+    }
+    $group .= form_select(t('MIME type'), 'format', $edit['format'], _banner_supported_mime_types(), t('The banner\'s MIME type (Multipurpose Internet Mail Extension) determines how it is displayed by your web browser.  The MIME type should have been automatically detected when you uploaded your banner, but if the value was detected incorrectly or shows "unsupported" be sure to adjust it to a supported setting.  If you re-upload the banner file at the same time, the auto-detected MIME type will over ride your manual setting.'));
+  }
+  $form .= form_group(t('File'), $group);
+
+  $form .= form_submit(t('Save'));
+  if (!is_null($edit['id'])) {
+    $form .= form_hidden('id', $edit['id']);
+    $form .= form_submit(t('Delete'));
+  }
+  
+  return form($form, 'post', 0, array('enctype' => 'multipart/form-data'));
+}
+
+function banner_save($edit) {
+  $fields = array('title', 'url', 'status', 'position', 'uid', 'publish_date', 'unpublish_date', 'day_notify', 'week_notify', 'failed_notify', 'reminder_sent', 'chance', 'max_clicks', 'max_views', 'day_max_views', 'week_max_views');
+
+  _banner_handle_upload($fields, $edit);
+
+  $fields[] = 'created';
+  $edit['created'] = time();
+  if ($edit['publish_date']) {
+    $edit['publish_date'] = strtotime($edit['publish_date']);
+  }
+  if ($edit['unpublish_date']) {
+    $edit['unpublish_date'] = strtotime($edit['unpublish_date']);
+  }
+  $reset = 0;
+  if ($edit['reset_total']) {
+    $edit['views'] = 0;
+    $fields[] = 'views';
+    $edit['clicks'] = 0;
+    $fields[] = 'clicks';
+    $reset = $edit['id'];
+  }
+  if ($edit['reset_week']) {
+    $edit['week_views'] = 0;
+    $fields[] = 'week_views';
+    $edit['week_clicks'] = 0;
+    $fields[] = 'week_clicks';
+    $reset = $edit['id'];
+  }
+  if ($edit['reset_day']) {
+    $edit['day_views'] = 0;
+    $fields[] = 'day_views';
+    $edit['day_clicks'] = 0;
+    $fields[] = 'day_clicks';
+    $reset = $edit['id'];
+  }
+
+  if ($edit['id']) {
+    // update
+    foreach ($fields as $field) {
+      $update[] = "$field = '" .check_query($edit[$field]). "'";
+    }
+    
+    _banner_refresh_cache();
+    db_query('UPDATE {banner} SET ' .implode(', ', $update). ' WHERE id = %d', $edit['id']);
+
+    $string = t('banner updated.');
+  }
+  else {
+    // insert    
+    $fields[] = 'id';
+    $edit['id'] = db_next_id('banner');
+
+    foreach ($fields as $field) {
+      $values[] = (string)check_query($edit[$field]);
+    }
+
+    db_query('INSERT INTO {banner} (' .implode(', ', $fields). ") VALUES ('" .implode("', '", $values). "')");
+
+    $string = t('banner added.');
+  }
+
+  _banner_refresh_cache(array('banner_reset' => $reset));
+  drupal_set_message($string);
+  return;
+}
+
+function banner_delete($edit) {
+  file_delete(db_result(db_query('SELECT path FROM {banner} WHERE id = %d', $edit['id'])));
+
+  watchdog('special', strtr("banner: '%banner' deleted.", array('%banner' => l("$edit[title]", "admin/banner/edit/$edit[id]"))));
+  db_query('DELETE FROM {banner} WHERE id = %d', $edit['id']);
+  _banner_refresh_cache();
+  drupal_set_message(t('banner deleted.'));
+  return;
+}
+
+function banner_overview() {
+
+  $headers = array(
+    array('data' => t('id'), 'field' => 'id'),
+    array('data' => t('title'), 'field' => 'title'),
+    array('data' => t('url'), 'field' => 'url'),
+    array('data' => t('status'), 'field' => 'status', 'sort' => 'asc'),
+    array('data' => t('owner'), 'field' => 'id'),
+    array('data' => t('group'), 'field' => 'position'),
+    array('data' => t('views'), 'field' => 'views'),
+    array('data' => t('clicks'), 'field' => 'clicks'),
+    array('data' => t('options'))
+    );
+
+  $sql = 'SELECT title, url, status, uid, position, views, clicks, id FROM {banner}';
+  $sql .= tablesort_sql($headers);
+
+  $result = pager_query($sql, 20);
+  while ($banner = db_fetch_object($result)) {
+    $row = array();
+    $row[] = $banner->id;
+    $row[] = $banner->title;
+    $row[] = $banner->url;
+    $row[] = _banner_status($banner->status);
+    $user = user_load(array('uid' => "$banner->uid"));
+    $row[] = array('data' => l($user->name, "admin/user/edit/$user->uid"), 'align' => 'center');
+    $row[] = array('data' => $banner->position, 'align' => 'center');
+    $row[] = array('data' => $banner->views, 'align' => 'center');
+    $row[] = array('data' => $banner->clicks, 'align' => 'center');
+    // TODO: update "edit" page to offer ability to edit all attributes
+    $row[] = array('data' => '['. l(t('view'), "admin/banner/{$banner->id}/view") .'] ['. l(t('edit'), "admin/banner/{$banner->id}/edit") .']', 'align' => 'center');
+    $rows[] = $row;
+  }
+  if($pager = theme('pager', NULL, 20, 0, tablesort_pager())) {
+    $rows[] = array(array('data' => $pager, 'colspan' => 8));
+  }
+
+  $out .= theme('table', $headers, $rows);
+
+  return $out;
+}
+
+function _banner_status($status = 99) {
+  switch($status) {
+    case 0:
+      // requires administrative approval
+      return t('pending');
+    case 1:
+      // actively being displayed
+      return t('enabled');
+    case 2:
+      // disabled for the rest of the day
+      return t('day\'s limit reached');
+    case 3:
+      // disabled for the rest of the week
+      return t('week\'s limit reached');
+    case 4:
+      // disabled until it's reenabled (by admin or owner)
+      return t('disabled');
+    case 5:
+      // administratively blocked -- possibly expired
+      return t('blocked');
+    case 6:
+      // rejected banner, will not be displayed
+      return t('denied');
+    default:
+      return array(0 => t('pending'), 1 => t('enabled'), 2 => t('day\'s limit reached'), 3 => t('week\'s limit reached'), 4 => t('disabled'), 5 => t('blocked'), 6 => t('denied'));
+  }
+}
+
+function _banner_mail_text($message) {
+  switch ($message) {
+    case 'daily_notify':
+      return t("Hello %username,\n\n  Here is your daily summary for your '%bannername' banner on %sitename:\n\n  Today:\n    Views:  %day_views\n    Clicks: %day_clicks\n\n  This week:\n    Views:  %week_views\n    Clicks: %week_clicks\n\n  All time:\n    Views:  %total_views\n    Clicks: %total_clicks\n\n--\nThis email was automatically generated at your request.\nUnsubscribe here: %url");
+    case 'weekly_notify':
+      return t("Hello %username,\n\n  Here is your weekly summary for your '%bannername' banner on %sitename:\n\n  Today:\n    Views:  %day_views\n    Clicks: %day_clicks\n\n  This week:\n    Views:  %week_views\n    Clicks: %week_clicks\n\n  All time:\n    Views:  %total_views\n    Clicks: %total_clicks\n\n--\nThis email was automatically generated at your request.\nUnsubscribe here: %url");
+    case 'renewal':
+      return t("Hello %username,\n\n Your advertisement '%bannername' on %sitename will expire on %expire.  Please let us know if you are interested in renewing.\n\n To date, this ad has been viewed %total_views times and clicked %total_clicks times.\n\nThank you!\n %sitename team");
+    case 'upload_notify':
+      return t("Hello %admin,\n\n%sitename user '%username' has uploaded a new banner titled, '%bannername'.\n\n%pending_url");
+  }
+}
+
+function theme_banner_show($banner) {
+  $filename = file_create_url("$banner->path");
+
+  switch(_banner_type($banner->format)) {
+    case 'image':
+      return l("<img src='$filename' border=0 width='$banner->width' height='$banner->height'>", "banner/$banner->id");
+      break;
+    case 'swf':
+      $out = <<<EOD
+<object classid="clsid:D27CDB6E-AE6D-11cf-96B8-444553540000" codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab#version=6,0,29,0" width="$banner->width" height="$banner->height">
+  <param name="movie" value="$filename">
+  <param name="quality" value="high">
+  <embed src="$filename" quality="high" pluginspage="http://www.macromedia.com/go/getflashplayer" type="application/x-shockwave-flash" width="$banner->width" height="$banner->height"></embed></object>
+EOD;
+      return $out;
+      break;
+    case 'text':
+      return file_get_contents(file_create_path($banner->path));
+      break;
+  }
+}
+
+function _banner_refresh_cache( $param = array() ) {
+  $cache_type = variable_get('banner_cache', '0');
+
+  if ($cache_type == 1) {
+    # file cache
+    $cache_file = 'misc/' .variable_get('banner_cache_key', '1'). '.banner.cache';
+    if (!$fd = @fopen($cache_file, 'r+')) {
+      if (!$fd = @fopen($cache_file, 'w+')) {
+        die('can\'t create cache file (enable write permissions in misc/)');
+      }
+    }
+    flock($fd, LOCK_EX);
+    $contents = fread($fd, filesize($cache_file));
+    rewind($fd);
+
+    // update views in db
+    $struct = unserialize($contents);
+    if ($struct) {
+      foreach ($struct[1] as $id => $banner) {
+        if ($param['banner_reset'] != $id) {
+          db_query('UPDATE {banner} SET views = %d, day_views = %d, week_views = %d WHERE id = %d', $banner->views, $banner->day_views, $banner->week_views, $id);
+        }
+      }
+    }
+
+    _banner_reset_counters( $param );
+
+    $struct = _banner_get_struct();
+    if ($struct) {
+      $struct[] = time();
+
+      $data = serialize($struct);
+
+      fwrite($fd, $data, strlen($data));
+      flock($fd, LOCK_UN);
+      fclose($fd);
+    }
+  }
+  else {
+    _banner_reset_counters( $param );
+  }
+}
+
+function _banner_get_struct() {
+  $result = db_query('SELECT * FROM {banner} WHERE status = 1');
+  while ($banner = db_fetch_object($result)) {
+    for ($n=0; $n<$banner->chance; $n++) {
+      $ballot[$banner->position][] = $banner->id;
+    }
+
+    $banners[$banner->id]->views = $banner->views;
+    $banners[$banner->id]->day_views = $banner->day_views;
+    $banners[$banner->id]->day_max_views = $banner->day_max_views;
+    $banners[$banner->id]->week_views = $banner->week_views;
+    $banners[$banner->id]->week_max_views = $banner->week_max_views;
+    $banners[$banner->id]->max_views = $banner->max_views;
+    $banners[$banner->id]->filename = file_create_url($banner->file);
+    $banners[$banner->id]->html = "document.write('".str_replace(array("'", "\n", "\r"), array("\'", " ", " "), theme('banner_show', $banner))."')";
+  }
+
+  if ($banners) {
+    $struct[] = $ballot;
+    $struct[] = $banners;
+  }
+
+  return $struct;
+}
+
+function _banner_get_cache() {
+  $cache_type = variable_get('banner_cache', '0');
+
+  if ($cache_type == 1) {
+    # file cache
+    $cache_file = 'misc/' .variable_get('banner_cache_key', '1'). '.banner.cache';
+    if (!$fd = fopen($cache_file, 'r')) {
+      die('banner cache file not found.');
+    }
+    flock($fd, LOCK_SH);
+    $contents = fread($fd, filesize($cache_file));
+    flock($fd, LOCK_UN);
+    fclose($fd);
+
+    return unserialize($contents);
+  }
+  else {
+    return t('Cache disabled');
+  }
+}
+
+function _banner_reset_counters( $param = array() ) {
+  if ($param[reset_day_counters]) {
+    db_query('UPDATE {banner} SET day_views = 0, day_clicks = 0');
+    // TODO: Watchdog entry
+    // change from status (2) "day's limit reached" to (1) "enabled"
+    db_query('UPDATE {banner} SET status = 1 where status = 2');
+  }
+  if ($param[reset_week_counters]) {
+    db_query('UPDATE {banner} SET week_views = 0, week_clicks = 0');
+    // TODO: Watchdog entry 
+    // change from status (3) "week's limit reached" to (1) "enabled"
+    db_query('UPDATE {banner} SET status = 1 where status = 3');
+  }
+}
+
+/**
+* Get banner html
+*
+* Returns some html code to show a banner in a given group.
+* Call this function from your theme, use groups in different places.
+*
+* @param integer $group group of the banner in the theme
+* @return string proper HTML to show the banner
+*/
+function banner_display($group = 0) {
+  global $base_url;
+ 
+  if (user_access('show banners')) {
+    $files = array('banner_db.php', 'banner_file.php');
+    $file = $files[variable_get('banner_cache', '0')] ."?pos=$group&amp;key=". variable_get('banner_cache_key', '1');
+    return '<script type="text/javascript" language="javascript" src="'."$base_url/$file".'"></script>';
+  }
+}
+
+// all supported mime types - same as below in _banner_supported_mime_types
+function _banner_type($mime_type) {
+  switch($mime_type) {
+    case 'image/jpg':
+    case 'image/pjpg':
+    case 'image/jpeg':
+    case 'image/pjpeg':
+    case 'image/gif':
+    case 'image/png':
+    case 'image/bmp':
+    case 'image/tiff':
+      return 'image';
+    case 'application/x-shockwave-flash':
+      return 'swf';
+    case 'text/plain':
+      return 'text';
+    default:
+      return 'unsupported';
+  }
+}
+
+// array of all supported mime types - same as list above in _banner_type
+function _banner_supported_mime_types() {
+  return(array('image/jpg' => t('image/jpg'), 'image/pjpg' => t('image/pjpg'), 'image/jpeg' => t('image/jpeg'), 'image/pjpeg' => t('image/pjpeg'), 'image/gif' => t('image/gif'), 'image/png' => t('image/png'), 'image/bmp' => t('image/bmp'), 'image/tiff' => t('image/tiff'), 'application/x-shockwave-flash' => t('application/x-shockwave-flash'), 'text/plain' => t('text/plain'), 'unsupported' => t('unsupported')));
+}
+
+function _banner_handle_upload(&$fields, &$edit) {
+  if ($file = file_save_upload('path', file_create_path(variable_get('banner_image_path', 'banners')))) {
+    $fields[] = 'path';
+    $edit['path'] = $file->filepath;
+    $fields[] = 'format';
+    switch (_banner_type($file->filemime)) {
+      // We support the following file types
+      case 'image':
+      case 'swf':
+      default:
+        $fields[] = 'width';
+        $fields[] = 'height';
+        list($edit['width'], $edit['height']) = getimagesize($file->filepath);
+        $edit['format'] = $file->filemime;
+        break;
+      // Otherwise assume it's text...
+      case 'text':
+        $edit['format'] = 'text/plain';
+    }
+  }
+}
+
+?>

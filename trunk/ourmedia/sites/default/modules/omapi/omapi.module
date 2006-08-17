@@ -1,0 +1,625 @@
+<?php
+
+
+/**
+
+ * Implementation of hook_xmlrpc().
+
+ */
+
+function omapi_xmlrpc() {
+
+  return array(
+    array(
+      'ourmedia.people.findbyemail',
+      'omapi_userbyemail',
+      array('struct', 'string'),
+      t('Find user by E-Mail')),
+    array(
+      'ourmedia.people.findbyname',
+      'omapi_userbyname',
+      array('struct', 'string'),
+      t('Find user by Name')),
+    array(
+      'ourmedia.people.findbyid',
+      'omapi_userbyid',
+      array('struct', 'int'),
+      t('Find user by ID')),
+    array(
+      'ourmedia.people.getGroups',
+      'omapi_usergroups',
+      array('struct', 'int'),
+      t('get user groups')),
+    array(
+      'ourmedia.node.delete',
+      'omapi_deletenode',
+      array('boolean', 'string', 'string', 'int'),
+      t('Delete a node')),
+    array(
+      'ourmedia.node.unpublish',
+      'omapi_deletenode',
+      array('boolean', 'string', 'string', 'int'),
+      t('Delete a node')),
+    array(
+      'ourmedia.ia.filetoia',
+      'omapi_filetoia',
+      array('string', 'string'),
+      t('get identifier from file')),
+    array(
+      'ourmedia.ia.details',
+      'omapi_ia_details',
+      array('string', 'string'),
+      t('get node from identifier')),
+    array(
+      'ourmedia.ia.unpublish',
+      'omapi_ia_unpublish',
+      array('boolean','string','string','string'),
+      t('unpublish media from identifier')),
+    array(
+      'ourmedia.buddies.getList',
+      'omapi_buddylist',
+      array('int', 'string', 'string'),
+      t('get buddy list')),
+    array(
+      'ourmedia.groups.getItems',
+      'omapi_groupnodes',
+      array('struct','int'),
+      t('get group items')),
+    array(
+      'ourmedia.site.recentgroups',
+      'omapi_newgroups',
+      array('struct'),
+      t('get group info')),
+    array(
+      'ourmedia.site.recentusers',
+      'omapi_newusers',
+      array('struct'),
+      t('get group info')),
+    array(
+      'ourmedia.site.search',
+      'omapi_searchnodes',
+      array('struct','string'),
+      t('site search')),
+    array(
+      'ourmedia.site.recentmedia',
+      'omapi_newmedia',
+      array('struct'),
+      t('get group info')));
+}
+
+function _omapi_get_file_for_id ($fid) {
+  $result = db_query("SELECT * FROM {files} WHERE fid = %d", $fid);
+  if (db_num_rows($result)) {
+    $file = db_fetch_object($result);
+  }
+  return $file;
+}
+
+function omapi_ia_details($identifier) {
+
+
+// LOOKUP identifier ... in a table?
+  $nid = db_result(db_query("SELECT nid FROM {ia} WHERE ia_identifier='%s'", $identifier));
+  if (!$nid) {
+    $nid = ia_fetch($identifier);
+  }
+
+if (!$nid) {
+return xmlrpc_error(-1,"unable to fetch identifier");
+}
+else {
+$link = url("node/$nid", NULL, NULL, 1);
+return $link;
+}
+
+}
+
+function omapi_nodefiles($nid)
+{
+
+	if (!is_numeric($nid)) 
+	{
+		return xmlrpc_error(-1,"missing node id");
+	}
+
+	$files_list = array();
+
+	$node = node_load(array('nid' => $nid));
+
+	$identifier = $node->ia_identifier;
+	$files = $node->files;
+	foreach ($files as $file)
+	{
+		$fid = $file->fid;
+		$filename = $file->filename;
+		$url = "http://www.archive.org/download/$identifier/$filename";
+
+		$list = array();
+		$list += array("filename" => $filename);
+		$list += array("download" => $url);
+		$list += array("fid" => $fid);
+		$files_list[] = $list;
+	}
+
+return $files_list;
+}
+
+function omapi_searchnodes($keys)
+{
+
+	if (!function_exists("do_search"))
+	{
+		return xmlrpc_error(-1,"search not enabled");
+	}
+
+    $results = do_search($keys,'omapi');
+
+	$search_list = array();
+
+    if ($results) 
+	{
+        foreach ($results as $entry) 
+		{
+      		$node = node_load(array('nid' => $entry));
+			$title = $node->title;
+			$nid = $node->nid;
+			$type = $node->type;
+			$description = $node->metadata['metadata_description'];
+      		$link = url("node/$nid", NULL, NULL, 1);
+
+			$search_item = array();
+			$search_item += array("nid" => $nid);
+			$search_item += array("title" => $title);
+			$search_item += array("type" => $type);
+			$search_item += array("description" => $description);
+			$search_item += array("link" => $link);
+			$search_list[] = $search_item;
+		}
+
+	}
+
+return $search_list;
+}
+
+function omapi_filetoia($fname)
+{
+
+  	$result = db_query("SELECT nid FROM {files} WHERE filename='%s'", $fname);
+
+	$file_list = array();
+
+ 	while ($node = db_fetch_object($result)) 
+	{
+		$item = node_load(array('nid' => $node->nid));
+		$identifier = $item->ia_identifier;
+		$nid = $item->nid;
+
+		$file_item = array();
+		$file_item += array("nid" => new xmlrpcval($nid, "int"));
+		$file_item += array("identifier" => new xmlrpcval($identifier, "string"));
+		$file_item = new xmlrpcval($file_item, "struct");
+		$file_list[] = $file_item;
+	}
+
+
+return new xmlrpcresp(new xmlrpcval($file_list, 'array'));
+
+}
+
+function omapi_unpublishnode($username,$password,$nid)
+{
+
+	if (!is_numeric($nid)) 
+	{
+		return xmlrpc_error(-1,"missing node id");
+	}
+
+  	$account = omapi_validate_user($username, $password);
+  	if (!$account->uid) {
+		return xmlrpc_error(-1,$account);
+  	}
+
+  	if (!array_search('Site Admin', $account->roles)) {
+		return xmlrpc_error(-1,"access denied");
+	}
+
+	db_query("UPDATE {node} SET status = 0 WHERE nid = %d",$nid);
+
+	return true;
+}
+
+function omapi_ia_unpublish($username,$password,$identifier)
+{
+
+  	$account = omapi_validate_user($username, $password);
+  	if (!$account->uid) {
+		return xmlrpc_error(-1,$account);
+  	}
+
+  	if (!array_search('Site Admin', $account->roles) && !array_search('Media Admin', $account->roles)) {
+		return xmlrpc_error(-1,"access denied");
+  	}
+
+  	$nid = db_result(db_query("SELECT nid FROM {ia} WHERE ia_identifier='%s'", $identifier));
+
+	if (!is_numeric($nid)) 
+	{
+		return xmlrpc_error(-1,"unable to fetch identifier");
+	}
+
+	db_query("UPDATE {node} SET status = 0 WHERE nid = %d",$nid);
+
+	return true;
+}
+
+function omapi_deletenode($username,$password,$nid)
+{
+
+	if (!is_numeric($nid)) 
+	{
+		return xmlrpc_error(-1,"missing node id");
+	}
+
+  	$account = omapi_validate_user($username, $password);
+  	if (!$account->uid) {
+		return xmlrpc_error(-1,$account);
+  	}
+
+  	if (!array_search('Site Admin', $account->roles)) {
+		return xmlrpc_error(-1,"access denied");
+	}
+
+	$ret = node_delete(array('nid' => $nid, 'confirm' => 1));
+
+	return true;
+
+}
+
+function _omapi_userinfo($account)
+{
+if (!$account->uid) {
+return xmlrpc_error(-1,"invalid user");
+}
+
+$name = $account->name;
+$userid = $account->uid;
+$link = url("user/$userid", NULL, NULL, 1);
+
+$roles = array();
+
+foreach (array_values($account->roles) as $rname) {
+$roles[] = $rname;
+}
+ 
+  return array(
+    'uid' => $userid,
+    'name' => $name,
+    'roles' => $roles,
+    'link' => $link
+  );
+
+}
+
+function omapi_userbyid($uid)
+{
+
+if (!is_numeric($uid)) 
+{
+return xmlrpc_error(-1,"missing id");
+}
+
+$account = user_load(array('uid' => $uid, 'status' => 1));
+
+return _omapi_userinfo($account);
+
+}
+
+function omapi_userbyname($username)
+{
+
+$account = user_load(array('name' => $username, 'status' => 1));
+
+return _omapi_userinfo($account);
+
+}
+
+function omapi_userbyemail($usermail)
+{
+
+if (!valid_email_address($usermail)) 
+{
+return xmlrpc_error(-1,"invalid email address");
+}
+
+$result = db_query("SELECT uid FROM users WHERE mail='$usermail';");
+$numaccounts = db_num_rows($result);
+
+switch($numaccounts)
+{
+default:
+return xmlrpc_error(-1,"$numaccounts accounts were found with this email address");
+break;
+case "1";
+$myuser = db_fetch_object($result);
+$account = user_load(array('uid' => $myuser->uid, 'status' => 1));
+return _omapi_userinfo($account);
+break;
+case "0":
+return xmlrpc_error(-1,"No accounts were found with this email address");
+break;
+}
+
+}
+
+
+function omapi_usergroups($uid)
+{
+
+if (!is_numeric($uid)) 
+{
+return xmlrpc_error(-1,"missing id");
+}
+
+$account = user_load(array('uid' => $uid, 'status' => 1));
+
+if (!$account->uid) {
+return xmlrpc_error(-1,"invalid user");
+}
+
+$group_list = array();
+
+  if ($account->og_groups) 
+	{
+     	foreach ($account->og_groups as $key => $val) 
+		{
+
+			$title = $val['title'];
+			$nid = $key;
+			$link = url("node/$key", NULL, NULL, TRUE);
+
+			$list = array();
+			$list += array("title" => $title);
+			$list += array("nid" => $nid);
+			$list += array("link" => $link);
+			$group_list[] = $list;
+     	}
+  	}
+
+return $group_list;
+
+}
+
+function omapi_joingroup($username,$password,$gid)
+{
+  
+
+  $account = omapi_validate_user($username, $password);
+  if (!$account->uid) {
+	return xmlrpc_error(-1,"missing id");
+  }
+
+  if ($account->uid && !node_access('update', array('nid' => $gid, 'status' => 1))) 
+  {
+    // only admins can subscribe another person
+	return xmlrpc_error(-1,"access denied");
+  } 
+  else 
+  {
+
+	$return = og_subscribe_user($gid, $account);
+
+	return $return;
+
+  }
+
+}
+
+function omapi_groupdetails($gid)
+{
+
+if (!is_numeric($gid)) 
+{
+return xmlrpc_error(-1,"missing group id");
+}
+
+$group = (object) array('nid' => $gid, 'status' => 1);
+
+$group_details = array();
+
+if (node_access('view', $group)) {
+        $gnode = node_load(array('nid' => $gid));
+        $title = $gnode->title;
+        $link = url("node/$gid", NULL, NULL, TRUE);
+        $description = $gnode->og_description;
+        $created = $gnode->created;
+        $feed = url("og/feed/$gid", NULL, NULL, TRUE);
+    	$cnt = db_num_rows(db_query(og_list_users_sql(), $gnode->nid));
+
+  return array(
+    'nid' => '$gid',
+    'title' => '$title',
+    'link' => '$link',
+    'members' => '$cnt',
+    'created' => '$created',
+    'feed' => '$feed',
+    'description' => '$description'
+  );
+
+}
+
+}
+
+function omapi_groupnodes($gid)
+{
+
+if (!is_numeric($gid)) 
+{
+return xmlrpc_error(-1,"missing group id");
+}
+
+$group = (object) array('nid' => $gid, 'status' => 1);
+$group_list = array();
+$group_data = array();
+
+if (node_access('view', $group)) {
+    $sql = og_get_home_nodes_sql();
+    $result = db_query(db_rewrite_sql($sql), $gid);
+    while ($onenode = db_fetch_array($result)) {
+      $nodes[] = $onenode['nid'];
+    }
+    if ($nodes) {
+        $sql = 'SELECT nid FROM {node} WHERE nid IN (%s)';
+        $result = db_query($sql, implode(', ', $nodes));
+
+        $gnode = node_load(array('nid' => $gid));
+        $title = $gnode->title;
+        $link = url("node/$gid", NULL, NULL, TRUE);
+        $description = $gnode->og_description;
+
+	    $group_info = array();
+	    $group_info += array("nid" => $gid);
+	    $group_info += array("title" => $title);
+		$group_info += array("link" => $link);
+		$group_info += array("description" => $description);
+
+ 		while ($node = db_fetch_object($result)) 
+		{
+    		  // Load the specified node:
+    		  $item = node_load(array('nid' => $node->nid));
+              $title = $item->title;
+			  $nid = $item->nid;
+    		  $link = url("node/$item->nid", NULL, NULL, 1);
+
+			  $group_item = array();
+			  $group_item += array("nid" => $nid);
+			  $group_item += array("title" => $title);
+			  $group_item += array("link" => $link);
+			  $group_list[] = $group_item;
+		}
+
+		$group_info += array("items" => $group_list);
+		
+		$group_data[] = $group_info;
+    }
+}
+
+return $group_data;
+
+}
+
+function omapi_newusers()
+{
+$result = db_query("SELECT uid,name,created FROM {users} ORDER BY created DESC LIMIT 10");
+
+$member_list = array();	
+
+	
+if (db_num_rows($result)) {
+	while ($member = db_fetch_object($result)) {
+
+	$link = url("user/$member->uid", NULL, NULL, 1);
+	$name = $member->name;
+	$uid = $member->uid;
+	
+	$list = array();
+	$list += array("name" => $name);
+	$list += array("uid" => $uid);
+	$list += array("link" => $list);
+	$member_list[] = $list;
+
+	}
+} 
+
+return $member_list;
+}
+
+function omapi_newgroups()
+{
+$sql = "SELECT n.nid, n.title FROM {node} n INNER JOIN {og} og ON n.nid = og.nid WHERE n.status = 1 AND n.type = 'og' AND og.directory=1 ORDER BY nid DESC";
+$result = db_query_range(db_rewrite_sql($sql), 0, 10);
+
+$group_list = array();	
+
+if (db_num_rows($result)) {
+	while ($node = db_fetch_object($result)) {
+
+	$link = url("node/$node->nid", NULL, NULL, 1);
+	$title = $node->title;
+	$nid = $node->nid;
+	
+	$list = array();
+	$list += array("title" => $title);
+	$list += array("nid" => $nid);
+	$list += array("link" => $link);
+	$group_list[] = $list;
+	}
+
+}
+
+return $group_list;
+
+}
+
+function omapi_newmedia()
+{
+$result = db_query("SELECT n.nid,title,type,created FROM {node} n, {ia} i WHERE n.status='1' AND (n.type='videomedia'  OR n.type='audiomedia' OR n.type='textmedia' OR n.type='imagemedia' ) AND n.nid = i.nid AND i.status = 1 ORDER BY created DESC LIMIT 10");
+
+$media_list = array();	
+	
+if (db_num_rows($result)) {
+	while ($node = db_fetch_object($result)) {
+
+	$type = $node->type;
+	$link = url("node/$node->nid", NULL, NULL, 1);
+	$title = $node->title;
+	$nid = $node->nid;
+	
+	$list = array();
+	$list += array("title" => $title);
+	$list += array("type" => $type);
+	$list += array("nid" => $nid);
+	$list += array("link" => $link);
+	$media_list[] = $list;
+
+	}
+} 
+
+return $media_list;
+
+}
+ 
+
+/**
+ * Ensure that the given user is authenticated
+ */
+function omapi_validate_user($username, $password) {
+  global $user;
+
+  $user = user_authenticate($username, $password);
+
+  if ($user->uid) {
+      return $user;
+	} else {
+    return t('Wrong username or password.');
+  }
+}
+
+/**
+
+ * Implementation of hook_help().
+
+ */
+
+function omapi_help($section) {
+
+  switch ($section) {
+
+    case 'admin/modules#description':
+
+      return t('Ourmedia Desktop API');
+
+  }
+
+}
+
+?>

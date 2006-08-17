@@ -1,0 +1,7 @@
+CREATE TABLE ia (
+  nid int(11) unsigned not null,
+  ia_identifier varchar(255) not null
+);
+ALTER TABLE ia ADD COLUMN status int(2) not null;
+ALTER TABLE ia ADD COLUMN contributor varchar(255);
+ALTER TABLE ia ADD PRIMARY KEY (ia_identifier);

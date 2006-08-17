@@ -1,0 +1,28 @@
+<?php
+// $Id: excerpt.module,v 1.1.2.1 2005/01/03 18:34:31 unconed Exp $
+
+function excerpt_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Allows users to enter a separate excerpt for nodes.');
+    case 'admin/node/configure/defaults':
+      return t('<p>If you want users to be able to enter separate excerpts for nodes, check the <em>excerpt</em> box in the appropriate column.</p>');
+  }
+}
+
+function excerpt_nodeapi(&$node, $op, $arg) {
+  switch ($op) {
+    case 'settings':
+      $output[t('excerpt')] = form_checkbox(NULL, "excerpt_$node->type", 1, variable_get("excerpt_$node->type", 1));
+      break;
+    case 'form post':
+      if (variable_get("excerpt_$node->type", 1)) {
+        $output = form_textarea(t('Excerpt'), 'teaser', $node->teaser, 60, 10, t('Enter an excerpt for this item. It will be shown on listing pages along with a <em>read more</em> link which leads to the full view.'));
+      }
+      break;
+  }
+
+  return $output;
+}
+
+?>

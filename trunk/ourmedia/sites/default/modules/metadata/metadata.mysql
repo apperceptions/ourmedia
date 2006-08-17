@@ -1,0 +1,12 @@
+#
+# Table structure for table `metadata_data`
+#
+
+DROP TABLE IF EXISTS metadata_data;
+CREATE TABLE metadata_data (
+  data_id int(11) NOT NULL auto_increment,
+  nid int(11) NOT NULL default '0',
+  type varchar(255) NOT NULL default '',
+  value mediumtext NOT NULL,
+  PRIMARY KEY  (data_id)
+) TYPE=MyISAM;

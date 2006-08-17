@@ -1,0 +1,64 @@
+$Id: INSTALL.txt,v 1.2.2.1 2004/11/18 11:49:26 gordon Exp $
+
+Installation
+------------
+
+Installation Instructions
+
+1. Copy this entire directory to the modules directory in your drupal
+   installation and make sure that it is accessible by the web server. 
+2. Add the htmlarea.sql to the drupal databasee.
+3. Enable the htmlarea module in drupal admin/modules.
+
+Cleaning up your installation
+-----------------------------
+
+If you want you can clean out your htmlarea directory and leave only what is
+required to run htmlarea then here is a list of what is required. If you
+don't really care then you can just leave everything from the distribution
+there.
+
+From the main directory you will require the following files and
+directories.
+     HTMLArea-CVS/
+     htmlarea.module
+
+From the HTMLArea-CVS directory you will require the following files and
+directories.
+     images/
+     popups/
+     lang/
+     plugins/
+     dialog.js
+     popupwin.js
+     htmlarea.css
+     htmlarea.js
+     start_drupal.inc <- if you want to use the UploadImage or
+                         UploadDocument plugins
+
+Configuration
+-------------
+admin/settings/htmlarea
+
+Default for new Textareas - this determines the default status for any new
+   new textarea fields. The default value is enabled then the new textarea
+   will automatically be changed to a htmlarea.
+
+Body Style - Determines the style of the htmlarea body.
+
+ToolBars - allows the system administrator to set up all the icons that can
+   be made available to the user. The lest select box is a list of all
+   valid options, and the right is your corrent configuration. Use the
+   buttons to add/delete and manipulate order.
+
+admin/system/modules/htmlarea/textarea
+
+This allows the enabling and disabling of individual textarea fields. Each text area field is identified by using the $q variable and removing the trailing
+numeric eg. node/25/edit -> node/edit and then appending the name of the
+textarea.
+
+Contact
+-------
+
+Gordon Heydon <gordon@heydon.com.au>
+     

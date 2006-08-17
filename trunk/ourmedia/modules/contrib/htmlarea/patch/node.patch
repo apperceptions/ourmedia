@@ -1,0 +1,46 @@
+Index: modules/node.module
+===================================================================
+RCS file: /cvs/drupal/drupal/modules/node.module,v
+retrieving revision 1.410.2.2
+diff -u -r1.410.2.2 node.module
+--- modules/node.module	29 Oct 2004 00:51:38 -0000	1.410.2.2
++++ modules/node.module	21 Nov 2004 01:54:26 -0000
+@@ -1351,7 +1351,7 @@
+ /**
+  * Respond to a user's submission of new or changed node content.
+  */
+-function node_submit($node) {
++function node_submit($node, $view = TRUE) {
+   global $user;
+ 
+   // Fix up the node when required:
+@@ -1359,7 +1359,7 @@
+ 
+   // If something went wrong, go back to the preview form.
+   if (form_get_errors()) {
+-    return node_preview($node);
++    return $node;
+   }
+ 
+   // Prepare the node's body:
+@@ -1384,7 +1384,10 @@
+ 
+   // Node was submitted successfully. Redirect to the viewing page.
+   drupal_set_message($msg);
+-  drupal_goto('node/'. $node->nid);
++  if ($view) {
++    drupal_goto('node/'. $node->nid);
++  }
++  return $node;
+ }
+ 
+ /**
+@@ -1496,7 +1499,7 @@
+       break;
+     case t('Submit'):
+       drupal_set_title(t('Submit'));
+-      print theme('page', node_submit($edit));
++      print theme('page', node_preview(node_submit($edit)));
+       break;
+     case t('Delete'):
+       print theme('page', node_delete($edit), t('Delete'));

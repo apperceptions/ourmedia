@@ -1,0 +1,279 @@
+<?php
+// $Id: forms.module,v 1.14 2004/11/27 02:05:09 walkah Exp $
+
+function forms_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      $output = t("Allows the creation of custom forms (to be used by other modules)");
+      break;
+  }
+
+  return $output;
+}
+
+/**
+ * API Functions
+ */
+
+/**
+ * form field api (similar to _nodeapi)
+ *
+ * @param &$field
+ *    A field object
+ * @param $ops
+ *   One of 'load', 'save', 'view', 'edit'
+ * @param $value
+ *   value to be passed to the hook (optional)
+ * @return
+ *    array of results from invoked hooks
+ */
+function forms_invoke_formapi($field, $op, $value = NULL) {
+  $return = array();
+  foreach (module_list() as $name) {
+    $function = $name .'_formapi';
+    if (function_exists($function)) {
+      $result = $function($field, $op, $value);
+      if (isset($result)) {
+        $return = array_merge($return, $result);
+      }
+    }
+  }
+  return $return;
+}
+
+/**
+ * Create a new form of the given type
+ *
+ * @return
+ *   id of the new form
+ */
+function forms_create($type) {
+  $fid = db_next_id('{forms}_fid');
+  db_query("INSERT INTO {forms} (fid, type, created) VALUES (%d, '%s', %d)", $fid, $type, time());
+  return $fid;
+}
+
+/**
+ * fetch a form object (either by type or by form id)
+ */
+function forms_load($conditions = array()) {
+  foreach ($conditions as $key => $value) {
+    $conds[] = db_escape_string($key) ." = '". db_escape_string($value) ."'";
+  }
+
+  $form = db_fetch_object(db_query("SELECT * FROM {forms} WHERE ". implode(' AND ', $conds)));
+
+  $form->fields = array();
+  if ($form->fid) {
+    $result = db_query("SELECT * FROM {form_fields} WHERE fid=%d ORDER BY weight ASC", $form->fid);
+    while ($field = db_fetch_object($result)) {
+      $field = drupal_unpack($field, 'flags');
+      
+      forms_invoke_formapi($field, 'load');
+      $field->name = _forms_field_name($field);
+      $form->fields[$field->ffid] = $field;
+    }
+  }
+  return $form;
+}
+
+/**
+ * store a $field object in the database
+ */
+function forms_save_field($field) {
+  if (is_array($field)) {
+    $field = array2object($field);
+  }
+
+  $field_cols = array('ffid','fid','title','explanation','page','type','weight','required','flags','validation','options','multiple');  
+  if ($field->ffid) {
+    $flags = unserialize(db_result(db_query('SELECT flags FROM {form_fields} WHERE ffid = %d', $field->ffid)));
+  }
+
+  foreach ($field as $key => $val) {
+    if (!in_array($key, $field_cols)) {
+      $flags[$key] = $val;
+    }
+  }
+
+  $field->flags = serialize($flags);
+
+  // store in the database
+  if (!$field->ffid) {
+    $field->ffid = db_next_id('{form_fields}_ffid');
+    db_query("INSERT INTO {form_fields} (ffid, fid, title, explanation, page, type, weight, required, flags, validation, options, multiple) VALUES (%d, %d, '%s', '%s', '%s', '%s', %d, %d, '%s', '%s', '%s', %d)",
+             $field->ffid, $field->fid, $field->title,  $field->explanation, $field->page, $field->type, $field->weight, $field->required, $field->flags, $field->validation, $field->options, $field->multiple);
+  }
+  else {
+    $old_field = db_fetch_object(db_query("SELECT * FROM {form_fields} WHERE ffid=%d", $field->ffid));
+    $old_field = drupal_unpack($old_field, 'flags');
+    forms_invoke_formapi($field, 'load');
+
+    db_query("UPDATE {form_fields} SET title='%s', explanation='%s', page='%s', type='%s', weight=%d, required=%d, flags='%s', validation='%s', options='%s', multiple=%d WHERE ffid=%d",
+             $field->title, $field->explanation, $field->page, $field->type, $field->weight, $field->required, $field->flags, $field->validation, $field->options, $field->multiple, $field->ffid);
+  }
+  forms_invoke_formapi($field, 'save', $old_field);
+  
+  drupal_set_message(t('Field \'%name\' saved successfully', array('%name' => $field->title)));
+}
+
+/**
+ * delete a field
+ */
+function forms_delete_field($field) {
+  // delete the record
+  db_query("DELETE FROM {form_fields} WHERE ffid=%d", $field->ffid);
+
+  // invode formapi::delete
+  forms_invoke_formapi($field, 'delete');
+}
+
+/**
+ * delete an entire form
+ */
+function forms_delete($form) {
+  foreach ($form->fields as $field) {
+    forms_delete_field($field);
+  }
+
+  db_query("DELETE FROM {forms} WHERE fid=%d", $form->fid);
+}
+      
+/**
+ * form for editing a field
+ */
+function forms_field_form($field, $exclude = NULL) {
+
+  $output.= form_hidden('fid', $field->fid);
+  $output.= form_hidden('ffid', $field->ffid);
+
+  $output.= form_select(t('Type'), 'type', $field->type, _forms_get_field_types($exclude));
+  $output.= form_textfield(t('Title'), 'title', $field->title, 70, 128, t('The title will be shown in the user interface.'));
+  $output.= form_textarea(t('Explanation'), 'explanation', $field->explanation, 70, 3, t("An optional explanation to go with the new field.  The explanation will be shown to the user."));
+  $output.= form_textarea(t('Selection options'), 'options', $field->options, 70, 8, t("For select fields only. A list of all options - delimited by semicolons (e.g. red;blue;green). To have different labels from values, use colons e.g. 1:red;2:blue;3:green"));
+  $output.= form_checkbox(t('Allow multiple selection'), 'multiple', 1, $field->multiple);
+  $output.= form_weight(t('Weight'), 'weight', $field->weight, 5, t("The weights define the order in which the form fields are shown.  Lighter fields \"float up\" towards the top of the category."));
+  $output.= form_checkbox(t('Required field'), 'required', 1, $field->required);
+  $output.= form_select(t("Validation function"), 'validation', $field->validation, _forms_get_validation_types(), t("Name of a function to test the input value"));
+
+  // get extra form fields for 'flags'
+  $output.= implode('', forms_invoke_formapi($field, 'edit'));
+  
+  return $output;
+}
+
+function forms_render($form, $edit = array()) {
+  foreach ($form->fields as $field) {
+    $output.= forms_render_field($field, $edit[$field->name]);
+  }
+
+  return $output;
+}
+
+function forms_render_field($field, $value = null) {
+  forms_invoke_formapi($field, 'view');
+  $func = 'form_' . $field->type;
+  switch ($field->type) {
+    case 'radios':
+      $output .= $func($field->title, $field->name, $value, _forms_options($field->options), $field->explanation, $field->required);
+      break;
+    case 'select':
+      $output .= $func($field->title, $field->name, $value, _forms_options($field->options), $field->explanation, NULL, $field->multiple, $field->required);
+      break;
+    case 'textarea':
+      $output .= $func($field->title, $field->name, $value, 64, 5, $field->explanation, NULL, $field->required);
+      break;
+    case 'file':
+      $output .= $func($field->title, $field->name, '', $field->explanation, $field->required);
+      break;
+    case 'checkbox':
+      $output .= $func($field->title, $field->name, 1, $value, $field->explanation, NULL, $field->required);
+      break;
+    case 'textfield':
+    case 'password':
+      $output .= $func($field->title, $field->name, $value, 64, 64, $field->explanation, NULL, $field->required);
+      break;
+  }
+  return $output;
+}
+
+function forms_validate($form, $edit) {
+  $error = false;
+  
+  foreach ($form->fields as $field) {
+    if ($field->required && (!$edit[$field->name] || $edit[$field->name] === false)) {
+      form_set_error($field->name, t('%field is required', array('%field' => '<em>'.$field->title.'</em>')));
+      $error = true;
+    }
+
+    // check the validation callback
+    if ($func = $field->validation) {
+      $func = 'valid_' . $func;
+      if (function_exists($func) && !$func($edit[$field->name])) {
+        form_set_error($field->name, t('Invalid entry for %field', array('%field' => '<em>' . $field->title . '</em>')));
+        $error = true;
+      }
+    }
+  }
+
+  return $error;
+}
+
+
+/**
+ * HELPER FUNCTIONS
+ */
+
+/**
+ * option lists - can be either -
+ *  red;blue;green or
+ *  1:red;2:blue;3:green
+ */
+function _forms_options($options) {
+  $array = explode(';', $options);
+  $options = array();
+  foreach ($array as $opt) {
+    list($key, $value) = explode(':', $opt);
+    $key = trim($key);
+    if ($value) {
+      $options[$key] = trim($value);
+    }
+    else {
+      $options[$key] = $key;
+    }
+  }
+  return $options;
+}
+
+function _forms_get_field_types($exclude = NULL) {
+  $types = array('textfield', 'password', 'textarea', 'radios', 'select', 'checkbox', 'file');
+
+  if (is_array($exclude)) {
+    foreach ($exclude as $type) {
+      if (false !== ($pos = array_search($type, $types))) {
+        unset($types[$pos]);
+      }
+    }
+  }
+  return drupal_map_assoc($types);
+}
+
+function _forms_get_validation_types() {
+  $functions = get_defined_functions();
+
+  $types = array('' => t('--'));
+  foreach ($functions['user'] as $func) {
+    if (substr($func, 0, 6) == 'valid_') {
+      $types[] = substr($func, 6);
+    }
+  }
+
+  sort($types);
+  $types = drupal_map_assoc($types);
+  return array('' => '---') + $types;
+}
+
+function _forms_field_name($field) {
+  return 'field-'.$field->ffid;
+}
+?>

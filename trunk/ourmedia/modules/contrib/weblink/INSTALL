@@ -1,0 +1,41 @@
+Description:
+------------
+A categorized collection of links with monitoring abilities via cron. 
+
+Requirements:
+-------------
+
+This module requires Drupal CVS, and need at least one assigned vocabulary. 
+
+Installation:
+-------------
+
+1. Change/Create the SQL tables. This depends a little on your system.
+   If you already have an old weblink installed, do something like:
+     mysql -u username -ppassword database_name < update_weblink.mysql
+   If you are installing weblink for the first time, use:
+     mysql -u username -ppassword database_name < weblink.mysql
+     
+   If you are using postgresql :
+     psql -U username -d databasename < weblink.pgsql 
+
+2. Copy the weblink.module to the Drupal modules/ directory.
+
+3. Turn the module on in the admin interface (administration > settings >
+   modules).
+
+4. Setup at least one vocabulary for the weblink module on the taxonomy
+   admin page (administration > taxonomy).
+
+5. Go to the weblink module admin interface (administration > settings >
+   modules > weblink), and set the options are desired.
+
+6. Check user permissions for "access weblink monitor" and "create weblinks".
+
+Authors
+-------
+
+Barry O'Rourke (barry@alted.co.uk)
+Monitoring changes by Simon Lindsay (simon@dirtbike.ws)
+Integration and Bug Fixes by Adrian Rossouw (adrian@daemon.co.za)
+More bug fixes and cleanup by Gabor Hojtsy (goba [at] php.net)

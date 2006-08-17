@@ -1,0 +1,352 @@
+<?php
+// $Id: survey.module,v 1.6.2.1 2005/05/18 19:12:40 walkah Exp $
+
+/**
+ * Implementation of hook_help
+ */
+function survey_help($section = '') {
+  switch ($section) {
+    case 'admin/modules#description':
+      $output = t("Create user defined survey questions");
+      break;
+    case 'node/add#survey':
+      $output = t("A survey allows you to create a form for use on the site to collect data");
+      break;
+  }
+  return $output;
+}
+
+/**
+ * Implementation of hook_node_name
+ */
+function survey_node_name () {
+  return t('survey');
+}
+
+/**
+ * Implementation of hook_perm
+ */
+function survey_perm() {
+  return array('maintain surveys', 'submit surveys');
+}
+
+/**
+ * Implementation of hook_menu
+ */
+function survey_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array('path' => 'node/add/survey', 'title' => t('survey'),
+                     'access' => user_access('maintain surveys'));
+    $items[] = array('path' => 'survey/submit', 'title' => t('survey submission'),
+                     'callback' => 'survey_submit',
+                     'access' => user_access('submit surveys'),
+                     'type' => MENU_CALLBACK);
+  }
+  else {
+    if (user_access('maintain surveys') && arg(0) == 'node' && is_numeric(arg(1))) {
+      $node = node_load(array('nid' => arg(1)));
+      if ($node->nid && $node->type == 'survey') {
+        $items[] = array('path' => 'node/'.$node->nid.'/form', 'title' => t('form'),
+                         'callback' => 'survey_fields', 'access' => user_access('maintain surveys'),
+                         'type' => MENU_LOCAL_TASK, 'weight' => 3);
+        $items[] = array('path' => 'node/'. $node->nid.'/form/list', 'title' => t('list'),
+                         'type' => MENU_DEFAULT_LOCAL_TASK);
+        $items[] = array('path' => 'node/'.$node->nid.'/form/edit', 'title' => t('add field'),
+                         'callback' => 'survey_fields_edit', 'access' => user_access('maintain surveys'),
+                         'type' => MENU_LOCAL_TASK, 'weight' => 4);
+        $items[] = array('path' => 'node/'.$node->nid.'/form/delete', 'title' => t('delete field'),
+                         'callback' => 'survey_fields_delete', 'access' => user_access('maintain surveys'),
+                         'type' => MENU_CALLBACK);
+        
+        $items[] = array('path' => 'node/'.$node->nid.'/responses', 'title' => t('responses'),
+                         'callback' => 'survey_responses', 'access' => user_access('maintain surveys'),
+                         'type' => MENU_LOCAL_TASK, 'weight' => 5);
+        $items[] = array('path' => 'node/'. $node->nid.'/responses/list', 'title' => t('list'),
+                         'type' => MENU_DEFAULT_LOCAL_TASK);
+        $items[] = array('path' => 'node/'.$node->nid.'/responses/excel', 'title' => t('download to excel'),
+                         'callback' => 'survey_excel', 'access' => user_access('maintain surveys'),
+                         'type' => MENU_LOCAL_TASK, 'weight' => 1);
+      }
+    }
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_access
+ */
+function survey_access($op, $node) {
+  global $user;
+
+  if ($op == 'create' &&  user_access('maintain surveys')) {
+    return TRUE;
+  }
+
+  if ($op == 'update' && user_access('maintain surveys')) {
+    return TRUE;
+  }
+  
+  if ($op == 'delete' && user_access('maintain surveys')) {
+    return TRUE;
+  }
+}
+
+/**
+ * Impelementation of hook_validate
+ */
+function survey_validate(&$node) {
+  if ($node->email) {
+    $emails = explode(',', $node->email);
+    foreach ($emails as $email) {
+      if (!valid_email_address(trim($email))) {
+        form_set_error('email', t('Please specify a valid email address, or leave the field blank'));
+      }
+    }
+  }
+}
+
+/**
+ * Implementation of hook_form
+ */
+function survey_form(&$node) {
+  $output = '';
+  
+  if (function_exists('taxonomy_node_form')) {
+    $output .= implode('', taxonomy_node_form('survey', $node));
+  }
+
+  $output .= form_textarea(t('Intro Text'), 'body', $node->body, 60, 5);
+  $output .= filter_form('format', $node->format);
+  $output .= form_textfield(t('Path for "thank you" page'), "result_page", $node->result_page, 70, 70, t("This page is displayed after the form is submitted.  If you are not using clean URLs, specify the part after '?q='.  If unsure, specify nothing."));
+  $output .= form_textfield(t('Email address'), "email", $node->email, 70, 70, t("This email address will receive a copy of each survey submission. Multiple addresses can be specified as a comma-separated list."));
+
+  $output .= form_hidden('fid', $node->fid);
+
+  return $output;
+}
+
+/**
+ * Impelementation of hook_view
+ */
+function survey_view(&$node, $main = 0, $page = 0) {
+  if ($page) {
+    $form = forms_render($node->form, $_POST['edit'], $error);
+    $form.= form_submit(t('Submit'));
+    $form = form($form, "post", url('survey/submit/'.$node->nid));
+    $node->body .= $form;
+  }
+}
+
+/**
+ * Implementation of hook_load
+ */
+function survey_load($node) {
+  $survey = db_fetch_object(db_query("SELECT * FROM {survey} WHERE nid=%d", $node->nid));
+  $survey->form = forms_load(array('fid' => $survey->fid));
+
+  return $survey;
+}
+
+function survey_insert(&$node) {
+  // first thing to do is create a form to associate to this survey
+  $node->fid = forms_create('survey');
+  db_query("INSERT INTO {survey} (nid, fid, email, result_page) VALUES (%d, %d, '%s', '%s')",
+           $node->nid, $node->fid, $node->email, $node->result_page);
+}
+
+function survey_update(&$node) {
+  db_query("UPDATE {survey} SET email='%s', result_page='%s' WHERE nid=%d", $node->email, $node->result_page, $node->nid);
+}
+
+function survey_delete(&$node) {
+  forms_delete($node->form);
+  db_query("DELETE FROM {survey} WHERE nid=%d", $node->nid);
+}
+
+/**
+ * Show the fields for a survey
+ */
+function survey_fields() {
+  $nid = arg(1);
+  $node = node_load(array('nid' => $nid));
+
+  foreach ($node->form->fields as $field) {
+    $rows[] = array(array('data' => $field->title),
+                    array('data' => $field->type),
+                    array('data' => l(t('edit'), 'node/'.$nid.'/form/edit/'.$field->ffid)),
+                    array('data' => l(t('delete'), 'node/'.$nid.'/form/delete/'.$field->ffid)));
+  }
+  if ($rows) {
+    $output = theme('table', array(t('field'), t('type'), '&nbsp;', '&nbsp;'), $rows);
+  }
+  else {
+    $output = t('No fields defined');
+  }
+  print theme('page', $output);
+}
+
+function survey_fields_edit() {
+  $nid = arg(1);
+  $ffid = arg(4);
+
+  if (count($_POST) > 0) {
+    forms_save_field($_POST['edit']);
+    drupal_goto('node/'. $nid . '/form');
+  }
+  if ($ffid) {
+    $field = db_fetch_object(db_query("SELECT * FROM {form_fields} WHERE ffid=%d", $ffid));
+  }
+  else {
+    $field->fid = db_result(db_query("SELECT fid FROM {survey} WHERE nid=%d", $nid));
+  }
+
+  $form = forms_field_form($field);
+  $form.= form_submit(t('Save field'));
+  $content = form($form);
+  print theme('page', $content);
+}
+
+
+/**
+ * deletes a given field
+ */
+function survey_fields_delete() {
+  $ffid = arg(4);
+  $field = db_fetch_object(db_query("SELECT * FROM {form_fields} WHERE ffid=%d", $ffid));
+  $nid = db_result(db_query("SELECT s.nid FROM {survey} s INNER JOIN {forms} f ON s.fid=f.fid INNER JOIN {form_fields} ff ON f.fid=ff.fid WHERE ff.ffid=%d", $ffid));
+  if ($_POST['edit']['confirm'] == 1) {
+    forms_delete_field($field);
+    drupal_goto('node/'.$nid.'/form');
+  }
+
+  $content = form_hidden('confirm', 1);
+  $content.= form_item(t("Really delete %field?", array('%field' => '<em>' . $field->title . '</em>')), form_submit(t("delete")));
+  $content = form($content);
+  print theme('page', $content);
+}
+
+function survey_submit() {
+  global $user;
+  
+  $survey = node_load(array('nid' => arg(2)));
+
+  $error = forms_validate($survey->form, $_POST['edit']);
+  if (!$error) {
+    $responses = array();
+    $rid = db_next_id("{survey_responses}_rid");
+    db_query("INSERT INTO {survey_responses} (rid, nid, uid, created) VALUES (%d, %d, %d, %d)", $rid, $survey->nid, $user->uid, time());
+    foreach ($survey->form->fields as $field) {
+      if ($_POST['edit'][$field->name]) {
+        if (is_array($_POST['edit'][$field->name])) {
+          $value = implode(';', $_POST['edit'][$field->name]);
+        }
+        else {
+          $value = $_POST['edit'][$field->name];
+        }
+        $responses[$field->title] = $value;
+        db_query("INSERT INTO {survey_fields} (rid, ffid, value) VALUES (%d, %d, '%s')", $rid, $field->ffid, $value);
+      }
+    }
+
+    if ($survey->email) {
+      $subject = t('%survey submission', array('%survey' => $survey->title));
+      foreach ($responses as $key => $value) {
+        $body.= $key . " : ";
+        $body.= $value . "\n\n";
+      }
+      $body.= "-----\n";
+      $body.= t("Submitted by %name on %date\n", array('%name' => $user->name . ' ('.url('user/'.$user->uid, NULL, NULL, TRUE) .')', '%date' => format_date(time())));
+
+      $from = variable_get('site_mail', ini_get('sendmail_from'));
+      $headers = "From: $from\nReply-to: $from\nX-Mailer: Drupal\nReturn-path: $from\nErrors-to: $from";      
+      user_mail($survey->email, $subject, $body, $headers);
+    }
+    
+    if ($survey->result_page) {
+      drupal_goto($survey->result_page);
+    }
+    else {
+      drupal_set_message(t('Thank you for your submission'), 'success');
+    }
+  }
+  drupal_goto('node/'.$survey->nid);
+}
+
+function survey_responses() {
+  $survey = node_load(array('nid' => arg(1)));
+  $response_id = arg(3);
+
+  if ($response_id) {
+    $response = db_fetch_object(db_query("SELECT * FROM {survey_responses} WHERE rid=%d", $response_id));
+    $content = form_item(t('submitted by'), format_name(user_load(array('uid' => $response->uid))));
+    $content.= form_item(t('date'), format_date($response->created));
+
+    $res = db_query("SELECT f.title, r.value FROM {survey_fields} r INNER JOIN {form_fields} f ON f.ffid=r.ffid WHERE r.rid=%d ORDER BY f.weight", $response->rid);
+    while ($field = db_fetch_object($res)) {
+      $content.= form_item($field->title, $field->value);
+    }
+  }
+  else {
+    $header = array(t('Submitted by'), t('Date'), '');
+    $res = pager_query("SELECT u.uid, u.name, r.created, r.rid FROM {users} u INNER JOIN {survey_responses} r ON r.uid=u.uid WHERE r.nid=%d ORDER BY created DESC", 50, NULL, NULL, $survey->nid);
+    while ($response = db_fetch_object($res)) {
+      $rows[] = array(format_name($response), format_date($response->created),
+                      l(t('view'), 'node/'.$survey->nid.'/responses/'.$response->rid));
+    }
+    if ($pager = theme('pager', NULL, 50, 0, tablesort_pager())) {
+      $rows[] = array(array('data' => $pager, 'colspan' => 3));
+    }
+
+    $content = theme('table', $header, $rows);
+
+  }
+  print theme('page', $content);
+}
+
+function survey_excel() {
+  $survey = node_load(array('nid' => arg(1)));
+  if (!$survey->nid) {
+    drupal_not_found();
+  }
+  $res = db_query("SELECT u.name, r.*, f.* FROM {survey_responses} r INNER JOIN {survey_fields} f ON f.rid=r.rid INNER JOIN {form_fields} ff ON ff.ffid=f.ffid LEFT JOIN {users} u ON r.uid=u.uid WHERE r.nid=%d ORDER BY r.rid ASC, ff.weight ASC", $survey->nid);
+  
+  $header = array(t('Submitted by'), t('Date'));
+  foreach ($survey->form->fields as $field) {
+    $header[] = $field->title;
+  }
+
+  $rows = array();
+  $row = array();
+  $rid = 0;
+  while ($response = db_fetch_object($res)) {
+    if ($response->rid != $rid) {
+      $fields = $survey->form->fields;
+      if (count($row) > 0) {
+        $rows[] = $row;
+      }
+      $rid = $response->rid;
+      if (!$response->name) {
+        $name = variable_get("anonymous", "Anonymous");
+      }
+      else {
+        $name = $response->name;
+      }
+      $row = array($name, format_date($response->created));
+    }
+    $field = array_shift($fields);
+    while ($field->ffid != $response->ffid) {
+      $row[] = '';
+      $field = array_shift($fields);
+    }
+    $row[] = $response->value;
+  }
+  $rows[] = $row;
+
+  header('Content-type: application/vnd.ms-excel');
+  header('Content-Disposition: attachment; filename="survey_results.xls"');    
+  print theme('table', $header, $rows);
+  exit;
+}
+
+?>

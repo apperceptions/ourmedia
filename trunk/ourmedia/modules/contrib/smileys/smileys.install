@@ -1,0 +1,25 @@
+<?php
+function smileys_install() {
+  $query = "
+CREATE TABLE {smileys} (
+  id int(11) auto_increment,
+  acronyms varchar(255) DEFAULT '' NOT NULL,
+  image varchar(255) DEFAULT '' NOT NULL,
+  description varchar(64) DEFAULT '' NOT NULL,
+  standalone tinyint(1) DEFAULT '0' NOT NULL,
+  PRIMARY KEY (id)
+ )";
+ db_query($query);
+
+ db_query("INSERT INTO {smileys} VALUES (1,  ':) :-) :smile:',  'misc/smileys/smile.png','Smiling',1)");
+ db_query("INSERT INTO {smileys} VALUES (2,  ';) ;-) :wink:',   'misc/smileys/wink.png','Eye-wink',1)");
+ db_query("INSERT INTO {smileys} VALUES (3,  ':( :-( :sad:',    'misc/smileys/sad.png','Sad',1)");
+ db_query("INSERT INTO {smileys} VALUES (4,  ':D :-D :lol:',    'misc/smileys/lol.png','Laughing out loud',1)");
+ db_query("INSERT INTO {smileys} VALUES (5,  '}:) }:-) :evil:', 'misc/smileys/evil.png','Evil',1)");
+ db_query("INSERT INTO {smileys} VALUES (6, ':P :-P :tongue:',  'misc/smileys/tongue.png','Sticking out tongue',1)");
+ db_query("INSERT INTO smileys VALUES (7, ':O :-O :shocked:', 'misc/smileys/shock.png','Shocked',1)");
+ db_query("INSERT INTO smileys VALUES (8, ':? :-? :puzzled:', 'misc/smileys/puzzled.png','Puzzled',1)");
+ db_query("INSERT INTO smileys VALUES (9, '8) 8-) :cool:',    'misc/smileys/cool.png','Cool',1)");
+ db_query("INSERT INTO smileys VALUES (10,':jawdrop:',        'misc/smileys/jawdrop.gif','Jawdropping!',1)");
+}
+?>

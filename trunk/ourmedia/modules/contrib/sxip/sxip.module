@@ -1,0 +1,740 @@
+<?php
+global $SXIP_FETCH, $SXIP_COMMAND, $SXIP_REQUEST, $SXIP_RESPONSE;
+
+/**
+ * Defining all the defaults
+ */
+define("DEFAULT_PROTOCOL","http");
+define("DEFAULT_HOMESITE_VAR","sxip-homesite");
+define("DEFAULT_MOD_SXIP",false);
+define("DEFAULT_MOD_SXIP_PATH_VAR","sxip-path");
+define("DEFAULT_MOD_SXIP_PATH_UNKNOWN","<UNKNOWN>");
+define("DEFAULT_MOD_SXIP_HOMESITE_PARAM","hs");
+define("DEFAULT_MOD_SXIP_HOMESITE_COOKIE","sxip-homesite");
+define("DEFAULT_MOD_SXIP_HOMESITE_UNKNOWN","<UNKNOWN>");
+
+/**
+ * Loading the SXIP objects
+ * If we are using the full mdk (xml support) we need to invlude a different
+ * set of files from those we include for the simple mdk. Unfortunately,
+ * they don't both use the same file name, and this may be corrected in 
+ * the future which will lead to further hacks right here.
+ */
+if (file_exists_incpath('SXIP/Request/LoginX.php')
+    && file_exists_incpath('SXIP/Request/Logout.php')
+    && file_exists_incpath('SXIP/Response.php')) {
+  require_once('SXIP/Request/LoginX.php'); 
+  require_once('SXIP/Request/Logout.php');
+  require_once('SXIP/Response.php');
+  define("DEFAULT_XML_SUPPORT",true);
+} else if (file_exists_incpath('SXIP.php')) {
+  require_once("SXIP.php");
+  define("DEFAULT_XML_SUPPORT",false);
+}
+/**
+ * Implements hook_help
+ */
+function sxip_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Allows users to authenticate via SXIP');
+    case 'user/help#sxip':
+      return t('<a href="http://www.sxip.com/aboutsxip.html">The Sxip Network</a> was designed to solve the problem of every website having it’s own standalone user authentication. %sitename is a Sxip Membersite. Once you create an account on the <a href="https://demohomesite.com/jsp/registerUser2.jsp">Sxip Network</a>, you\'ll be able to sign in anywhere you see the "sxip in" button without having to create a new account, and without having to re-enter any information. If you have an existing Drupal account on this site, you\'ll be able to use SXIP to sign into it as well as using your regular username and password.', array('%sitename' => variable_get('site_name', 'This Drupal site')));
+  }
+}
+
+/**
+ * Return SXIP info for dist_auth usage
+ */
+function sxip_info($field = 0) {
+  $info['name'] = 'SXIP';
+  
+  if ($field) {
+    return $info[$field];
+  } 
+  else {
+    return $info;
+  }
+}
+
+/**
+ * Implement hook_auth to show in available dist_auth list
+ */
+function sxip_auth($username, $password, $server){
+  return;
+}
+
+/**
+ * Menu entries
+ * sxip/in: Handles the login(x) response
+ * sxip/out: Destroys the session and returns the checkmark
+ * sxip/homesite/get: Attempts to retrieve the shared cookie from the
+ *            shadow domain and return it to the calling page
+ * sxip/forward/request: Will supply a form in which the user must enter
+ *             a Homesite if none was found and then resubmit
+ *             the form variables posted to it to the Homesite
+ */
+function sxip_menu($may_cache) {
+  $items = array();
+  
+  if ($may_cache) {
+    $items[] = array('path' => 'sxip/in', 'title' => t('sxip in'),
+                     'callback' => 'sxip_in', 'type' => MENU_CALLBACK,
+                     'access' => TRUE);
+    $items[] = array('path' => 'sxip/out', 'title' => t('sxip out'),
+                     'callback' => 'sxip_out', 'type' => MENU_CALLBACK,
+                     'access' => TRUE);
+    $items[] = array('path' => 'sxip/homesite/get', 
+                     'title' => t('sxip get homesite'),
+                     'callback' => 'sxip_homesite_get',
+                     'type' => MENU_CALLBACK,
+                     'access' => TRUE);
+    $items[] = array('path' => 'sxip/forward/request', 
+                     'title' => t('sxip forward request'),
+                     'callback' => 'sxip_forward_request',
+                     'type' => MENU_CALLBACK,
+                     'access' => TRUE);
+  }
+  
+  return $items;
+}
+
+/**
+ * Implements hook_settings
+ * --site options--
+ * These control behavior of the MDK.
+ * sxip_membersite:
+ *     This is the fully qualified domain name (FQDN) of your site, as
+ *     registered on the Rootsite.
+ * sxip_xml_support:
+ *     This is a boolean to tell Drupal whether the Full or Simple MDK is
+ *     being used. Full means XML support is in use, if you have installed
+ *     Simple this should be set to 'No.' Keep in mind that 
+ *     Simple should not be used for secure data.
+ * sxip_protocol:
+ *     This is the return protocol for SXIP responses, if your site is
+ *     SSL-enabled this should be set to 'https,' otherwise 'http' is
+ *     the way to go.
+ * sxip_homesite_var:
+ *     This is the name of the variable that holds the homesite, it probably
+ *     should not be changed as it is looking for a value set by the
+ *     Homesite.
+ * --mod_sxip options--
+ * These enable mod_sxip support and cofigure it. You probably won't have to
+ * change any of these except to enable support.
+ * sxip_mod_sxip:
+ *     This enables mod_sxip support and switches the checks made for the
+ *     Homesite information to only deal with mod_sxip supplied variables.
+ * sxip_mod_sxip_path_var:
+ *     This is the name of the variable that holds the command path of
+ *     the Homesite. Supplied by mod_sxip, the default should be fine.
+ * sxip_mod_sxip_path_unknown
+ *     This is the value returned if the command path lookup failed to
+ *     return anything useful. Supplied by mod_sxip, the default should 
+ *     be fine.
+ * sxip_mod_sxip_homesite_param
+ *     This is the name of the GET variable returned by mod_sxip if
+ *     DirectToOrigin is set to off. Supplied by mod_sxip, the default
+ *     should be fine.
+ * sxip_mod_sxip_homesite_cookie
+ *     This is the name of the cookie variable set by mod_sxip once a
+ *     Homesite has been found. Supplied by mod_sxip, the default should
+ *     be fine.
+ * sxip_mod_sxip_homesite_unknown
+ *     This is the value returned if the shared cookie lookup failed to
+ *     return anythign useful. Supplied by mod_sxip, the default should
+ *     be fine.
+ * --field mappings--
+ * This section is only enabled if the 'profiles' module is enabled.
+ * When enabled, it will provide a dropdown selection box for each
+ * defined profile item of type textfield, textarea, or url
+ */
+function sxip_settings() {
+  $output = '';  
+  
+  $site_config = form_textfield(t('Membersite FQDN'), 'sxip_membersite', variable_get('sxip_membersite', ""), 60, 255, t("This is the fully qualified domain name (FQDN) of your site, as registered on the Rootsite."));
+  $site_config .= form_radios(t('XML Support'), 'sxip_xml_support', variable_get('sxip_xml_support', DEFAULT_XML_SUPPORT), array("1"=>"Yes","0"=>"No"),t("This is a boolean to tell Drupal whether the Full or Simple MDK is being used. Full means XML support is in use, if you have installed Simple this should be set to 'No.' Keep in mind that Simple should not be used for secure data."));
+  $site_config .= form_select(t("Request Return Protocol"), "sxip_protocol", variable_get('sxip_protocol', DEFAULT_PROTOCOL), array("http"=>"http","https"=>"https"),t("This is the return protocol for SXIP responses, if your site is SSL-enabled this should be set to 'https,' otherwise 'http' is the way to go."));  
+  $site_config .= form_textfield(t('Homesite Variable Name'), 'sxip_homesite_var', variable_get('sxip_homesite_var', DEFAULT_HOMESITE_VAR), 60, 60, t("This is the name of the variable that holds the homesite, it probably should not be changed as it is looking for a value set by the Homesite."));
+  
+  $output .= form_group(t("Site Config"),$site_config,t("These control behavior of the MDK."));
+  
+  $mod_config = form_radios(t('mod_sxip Support'), 'sxip_mod_sxip', variable_get('sxip_mod_sxip', DEFAULT_MOD_SXIP), array("1"=>"Yes","0"=>"No"),t("This enables mod_sxip support and switches the checks made for the Homesite information to only deal with mod_sxip supplied variables."));
+  $mod_config .= form_textfield(t('Path Variable Name'), 'sxip_mod_sxip_path_var', variable_get('sxip_mod_sxip_path_var', DEFAULT_MOD_SXIP_PATH_VAR), 60, 60, t("This is the name of the variable that holds the command path of the Homesite. Supplied by mod_sxip, the default should be fine."));
+  $mod_config .= form_textfield(t('Path Unknown Value'), 'sxip_mod_sxip_path_unknown', variable_get('sxip_mod_sxip_path_unknown', DEFAULT_MOD_SXIP_PATH_UNKNOWN), 60, 60, t("This is the value returned if the command path lookup failed to return anything useful. Supplied by mod_sxip, the default should be fine."));
+  $mod_config .= form_textfield(t('Homesite Parameter Variable Name'), 'sxip_mod_sxip_homesite_param', variable_get('sxip_mod_sxip_homesite_param', DEFAULT_MOD_SXIP_HOMESITE_PARAM), 60, 60, t("This is the name of the GET variable returned by mod_sxip if DirectToOrigin is set to off. Supplied by mod_sxip, the default should be fine."));
+  $mod_config .= form_textfield(t('Homesite Cookie Variable Name'), 'sxip_mod_sxip_homesite_cookie', variable_get('sxip_mod_sxip_homesite_cookie', DEFAULT_MOD_SXIP_HOMESITE_COOKIE), 60, 60, t("This is the name of the cookie variable set by mod_sxip once a Homesite has been found. Supplied by mod_sxip, the default should be fine."));
+  $mod_config .= form_textfield(t('Homesite Unknown Value'), 'sxip_mod_sxip_homesite_unknown', variable_get('sxip_mod_sxip_homesite_unknown', DEFAULT_MOD_SXIP_HOMESITE_UNKNOWN), 60, 60, t("This is the value returned if the shared cookie lookup failed to return anythign useful. Supplied by mod_sxip, the default should be fine."));
+  
+  $output .= form_group(t("mod_sxip Config"),$mod_config, t("These enable mod_sxip support and cofigure it. You probably won't have to change any of these except to enable support."));    
+
+  if (array_key_exists("profile",module_list())) {
+    $options = array("" => "Select a property");  
+    $options = $options + _sxip_properties();
+    foreach (_sxip_profile_fields() as $fid => $title) {
+      $mapping .= form_select(t("Property for ").$title, "sxip_profile_".$fid, variable_get("sxip_profile_".$fid,""),$options);
+    }
+    $output .= form_group(t("Field Mappings"),$mapping,t("This section is only enabled if the 'profiles' module is enabled. When enabled it will provide a dropdown selection box for each defined profile item of type textfield, textarea, or url"));
+  }
+  
+  return $output;
+}
+
+/**
+ * Implementation of hook_block
+ * Provides the [sxip in] and [sxip out] buttons.
+ */
+function sxip_block($op = 'list', $delta = 0) {
+  global $user;
+  
+  if ($op == 'list') {
+    $block[0]['info'] = t('Sxip In/Out');
+  }
+  else {
+    if (!$user->uid) {
+      $block['content'] = _sxip_sxipin_form();
+      $block['subject'] = t('Sxip In');
+    }
+    else if ($user->gupi) {
+      $block['content'] = _sxip_sxipout_form();
+      $block['subject'] = t('Sxip Out');
+    }
+  }
+  return $block;
+}
+
+/**
+ * Handles a login(x) response, including registering a new account
+ * and updating a user's profile based on the received information.
+ */
+function sxip_in() {
+  global $user;
+  
+  $sxip_xml_support = variable_get("sxip_xml_support",DEFAULT_XML_SUPPORT);
+
+  if (count($_POST) > 0){
+    $res = new SXIP_Response;
+  
+    $res->fromAssoc($_POST);
+
+    $destination = $res->getPass(array("name"=>"destination"));
+    
+    foreach (_sxip_required_fetches() as $context => $property) {
+      $arg = array("context" => $context);
+      if ($sxip_xml_support) {
+        $arg = $arg + array("property" => $property);
+      }
+      ${$context} = $res->getFetch($arg);
+      if (!${$context}) {
+        drupal_set_message("sxip/in failed: ".$context." (".$property.") must not be empty");
+        drupal_goto($destination);
+      }
+    }
+    
+    $gupi = $res->gupi();
+
+    $server = "sxip.net";
+    $module = "sxip";
+    
+    /**
+     * We are going to either log in to an existing account via
+     * email address or generate a new account.
+     * If we generate a new account we will first check for a nick
+     * collision, then for a name collision, falling back upon
+     * gupi if both other options are taken.
+     */
+    $account = user_load(array('mail' => $email, 'status' => 1));
+    if ($account->uid) {
+      $user = $account;
+      if (!$user->gupi) {
+        // record their GUPI (if not done already)
+        $user = user_save($user, array('gupi' => $gupi));
+      }
+      watchdog('user', t('Sxip in for user: %name', array('%name' => $user->name)));
+    }
+    else if ($gupi) {
+      // need to register the user
+      // first check for nick collision
+      $account = user_load(array('name' => $nick));
+      if (!$account->uid) {
+        $name = $nick;
+      }
+      else {
+        $account = user_load(array('name' => $first_name . $last_name));
+        if (!$account->uid) {  
+          $name = $first_name . $last_name;
+        }
+        else {
+          $name = $gupi;
+        }
+      }
+      $user = user_save('', array('name' => $name, 
+                    'pass' => user_password(), 
+                    'init' => "$gupi@$server", 
+                    'mail' => $email, 'status' => 1, 
+                    "authname_$module" => "$gupi@$server", 
+                    'roles' => array(_user_authenticated_id()), 
+                    'gupi' => $gupi ));
+      watchdog('user', t('Account created for %name via SXIP in', array('%name' => $name)));
+    }
+    
+    /**
+     * Property requests
+     * Get the list of mapped fields (if the "profile" module is 
+     * enabled), then iterate over them getting the fetched value
+     * for each one and updating the field. 
+     * The account needs to be loaded so that fields can be set
+     */ 
+    $account = user_load(array('mail' => $email, 'status' => 1));
+    $fetches = array();
+    if (array_key_exists("profile",module_list())) {
+      foreach (_sxip_profile_fields() as $key => $value) {
+        if ($mapped = variable_get("sxip_profile_".$key,'')) {
+          $fetches["sxip_profile_".$key] = $mapped;
+        }
+      }
+    }
+    $fetched_data = array();
+    foreach ($fetches as $context => $property) {
+      $arg = array("context" => $context,
+             "default" => "");
+      if ($sxip_xml_support) {
+        $arg = $arg + array("property" => $property);
+      }
+      $fetched_data[$context] = $res->getFetch($arg);
+    }
+    foreach ($fetched_data as $context => $value) {
+      if ("sxip_profile_" == substr($context,0,13)) {
+        $fid = substr($context,13);
+        _sxip_profile_set($account->uid,$fid,$value);
+      }
+    }
+  }
+  drupal_goto($destination);
+}
+
+/**
+ * Logs the current user out and returns the checkmark image
+ */
+function sxip_out() {
+  global $user, $base_url;
+  
+  if ($_GET['messageID'] && $user->uid) {
+    watchdog('user', t('sxip out for user: %name.', array('%name' => "<em>$user->name</em>")));
+  
+    // Destroy the current session:
+    session_destroy();
+    module_invoke_all('user', 'logout', NULL, $user);
+    unset($user);
+  }
+  header('Location: '. $base_url . '/' . module_get_path('sxip') . '/images/sxip_checkmark.png');
+  exit;
+}
+
+/**
+ * Receives a request missing a proper command path then
+ * attempts to get a homesite from the user manually and
+ * re-submit the request to the Homesite.
+ * Should generate a form asking user to enter their Homesite
+ * FQDN if no command path was found that submits to itself
+ * carrying with it all the variables that have been sent to it
+ */
+function sxip_forward_request() {
+  /**
+   * First, try to get the homesite and command path from it
+   */
+  $homesite_var = variable_get("sxip_homesite_var",DEFAULT_HOMESITE_VAR);
+  if (!@$command_path = $_SESSION['command_path']) {
+    if (@$_POST[$homesite_var]) {
+      $command_path = SXIP_Request::getHomesiteCommandUri($_POST[$homesite_var]);
+    }
+  }
+  if ($command_path && !$form_action) {
+    $_SESSION['command_path'] = $command_path;
+    $form_action = "https://".$command_path;
+  }
+  if (!$command_path && !$form_action) {
+    $form_action = url("sxip/forward/request",NULL,NULL,True);
+  }
+ 
+  /**
+   * If we didn't get a command path from the user we want to
+   * generate a form asking for their Homesite FQDN
+   */
+  if (!$command_path) { 
+    $html =  "<p>".t("No valid Homesite was found or the homesite entered was not valid. Please enter the address of your Homesite below.")."</p>";
+    
+    $form_pieces = form_item(t("Your Homesite"),
+                "<input type='text' name='".$homesite_var."' value='".@$_POST[$homesite_var]."' size='60' maxlength='255' />\n",
+                t("The Fully Qualified Domain Name of your Homesite"));
+    foreach ($_POST as $key => $value) {
+      $form_pieces .= "<input type='hidden' name='".htmlentities($key, ENT_QUOTES)."'. value='".htmlentities($value, ENT_QUOTES)."' />\n";
+    }
+    $form_pieces .= form_submit("Submit");
+    
+    $html .= form($form_pieces,"POST",$form_action);
+    
+    print theme("page",$html,"Please Enter Your Homesite");
+  }
+  /**
+   * If we did get one, build a form to be auto-submitted to the
+   * Homesite using Javascript, passing along all values sent to it.
+   */
+  else {
+    $html = "<html><head><title>".t("SXIP Request Processor")."</title></head>";
+    $html .= "<body onLoad='javascript:document.forms[0].submit()'>";
+    $html .= "<p>".t("This form should be automatically submitted")."</p>";
+
+    $html .= "<form method='POST' action='";
+    $html .= $form_action."'>";
+    foreach ($_POST as $key => $value) {
+      $html .= "<input type='hidden' name='".$key."'";
+      $html .= " value='".htmlentities($value)."'>";
+    }
+    $html .= "<input type='submit' name='Submit'";
+    $html .= " value='Continue' /></form></body></html>";
+    $html .= $form."</body></html>";
+    echo $html;
+  }
+}
+
+/**
+ * Retrieves the Homesite from the shared cookie in the shadow domain.
+ * Must be called from the shadow domain to be of any use.
+ */
+function sxip_homesite_get() {
+  $homesite = @ $_COOKIE[variable_get("sxip_homesite_var",DEFAULT_HOMESITE_VAR)];
+  $returnPage = @ $_REQUEST['returnPage'];
+  $returnQuery = @ $_REQUEST['returnQuery'];    
+  $encoded_homesite = '';
+  
+  /**
+   * Optimized a bit out of understandability, basically this is
+   * checking whether a Homesite was found in the cookie, and if
+   * it resolves to a valid command path.
+   * If it does, set is the value of the $sxip_homesite_var GET
+   * variable to be returned to the calling page, otherwise
+   * just set the value to empty.
+   * Either way, return to the calling page and let it know
+   * that the cookie was already checked by setting the "checked"
+   * GET variable.
+   */
+  if ($homesite && SXIP_Request::getHomesiteCommandUri($homesite)) {
+    $encoded_homesite = urlencode($homesite);
+  }
+  
+  if ($returnQuery) {
+    $returnQuery .= "&";
+  }
+  $returnQuery .= variable_get("sxip_homesite_var",DEFAULT_HOMESITE_VAR) . "=" . $encoded_homesite;
+  $returnQuery .= "&checked=1";
+  header("Location: ".$returnPage."?".$returnQuery);
+}
+
+/**
+ *
+ * Helper functions
+ *
+ */
+ 
+/**
+ * Returns the [sxip in] form for use in the block.
+ * Tries to get a command path for the user's Homesite
+ * but if it cannot it sets the form action to the
+ * forward request handler.
+ */
+function _sxip_sxipin_form() {
+  /**
+   * Initialize the request object based on whether XML is
+   * supported.
+   */
+  $sxip_xml_support = variable_get("sxip_xml_support",DEFAULT_XML_SUPPORT);
+  if ($sxip_xml_support) {
+    $req = new SXIP_Request_LoginX();
+  }
+  else {
+    $req = new SXIP_Request_Login();
+  }
+
+  /**
+   * Now we get to go through the steps to get the 
+   * command path for the user's Homesite. Follow along closely,
+   * pretty much anything that inplements SXIP properly has to do
+   * most of this.
+   */
+  $command_path = false;
+  
+  /**
+   * First, check if we have already set a command path, if we have
+   * we don't need to check again, so just skip on down to the form
+   * action area.
+   */
+  if (!@ $command_path = $_SESSION['command_path']) {
+    /**
+     * If the site admin has enabled mod_sxip for Drupal then we will
+     * be going through a series of checks against the variables that
+     * mod_sxip may be providing.
+     * Basically, it equates to:
+     * if sxip-path is set and not equal to the unknown value
+     *     set command path to the value of sxip-path
+     * else if sxip-homesite is set and not equal to the unknown value
+     *     set command path to what is returned by the dns 
+     *     lookup of the homesite
+     * else just let it fall through and get the default treatment
+     */
+    if (variable_get("sxip_mod_sxip",DEFAULT_MOD_SXIP)) {
+      $mod_sxip_path_var = variable_get("sxip_mod_sxip_path_var",DEFAULT_MOD_SXIP_PATH_VAR);
+      $mod_sxip_path_unknown = variable_get("sxip_mod_sxip_path_unknown",DEFAULT_MOD_SXIP_PATH_UNKNOWN);
+      $mod_sxip_homesite_param = variable_get("sxip_mod_sxip_homesite_param",DEFAULT_MOD_SXIP_HOMESITE_PARAM);       
+      $mod_sxip_homesite_cookie = variable_get("sxip_mod_sxip_homesite_cookie",DEFAULT_MOD_SXIP_HOMESITE_COOKIE);       
+      $mod_sxip_homesite_unknown = variable_get("sxip_mod_sxip_homesite_unknown",DEFAULT_MOD_SXIP_HOMESITE_UNKNOWN);       
+        
+      if (@$_GET[$mod_sxip_path_var] && $_GET[$mod_sxip_path_var] != $mod_sxip_path_unknown) {
+        $command_path = $_GET[$mod_sxip_path_var];
+      }
+      else if (@$_COOKIE[$mod_sxip_path_var] && $_COOKIE[$mod_sxip_path_var] != $mod_sxip_path_unknown) {
+        $command_path = $_COOKIE[$mod_sxip_path_var];
+      }
+      else if (@$_GET[$mod_sxip_homesite_param] && $_GET[$mod_sxip_homesite_param] != $mod_sxip_homesite_unknown) {
+        $command_path = SXIP_Request::getHomesiteCommandUri($_GET[$mod_sxip_homesite_param]);
+      }
+      else if (@$_COOKIE[$mod_sxip_homesite_cookie] && $_COOKIE[$mod_sxip_homesite_cookie]!= $mod_sxip_homesite_unknown) {
+        $command_path = SXIP_Request::getHomesiteCommandUri($_COOKIE[$mod_sxip_homesite_cookie]);
+      }
+    }
+    /**
+     * If mod_sxip is not enabled then we will be using the
+     * sxip/homesite/get method for getting a Homesite value.
+     * Basically, it equates to:
+     * if sxip-homesite is set
+     *     set the command path to what is returned by the dns 
+     *     lookup of the homesite
+     * else if checked is set
+     *     we've already checked the homesite and found nothing
+     *     fall through to the default treatment
+     * else
+     *     redirect to sxip/homesite/get in the shadow domain
+     *     to get the Homesite
+     */
+    else {
+      $homesite_var = variable_get("sxip_homesite_var",DEFAULT_HOMESITE_VAR);
+      if (@$_GET[$homesite_var]) {
+        $command_path = SXIP_Request::getHomesiteCommandUri($_GET[$homesite_var]);
+      }
+      else if (@$_COOKIE[$homesite_var]) {
+        $command_path = SXIP_Request::getHomesiteCommandUri($_COOKIE[$homesite_var]);
+      }
+      if (@$_GET['checked'] || @$_SESSION['checked']) {
+        $_SESSION['checked'] = 1;
+      }
+      else {
+        $returnPage = urlencode($_SERVER['SCRIPT_URI']);
+        $returnQuery = urlencode($_SERVER['QUERY_STRING']);
+        $to = url("sxip/homesite/get",NULL,NULL,True);
+        $to = str_replace($_SERVER['HTTP_HOST'],$_SERVER['HTTP_HOST'].".membersite.sxip.net",$to);
+        header("Location: ".$to."?returnPage=".$returnPage."&returnQuery=".$returnQUery);
+      }
+    }  
+  }
+  /**
+   * If command_path was set, generate a form action from it
+   * otherwise set the form path to sxip/forward/request
+   */
+  if ($command_path) {
+    $_SESSION['command_path'] = $command_path;
+    $form_action = "https://".$command_path;
+  } 
+  else {
+    $form_action = url("sxip/forward/request",NULL,NULL,True);
+  }
+  
+  /**
+   * Finally, generate the form
+   */
+  $req->formAction($form_action);
+  $req->formMethod("POST");
+
+  $req->membersite(variable_get('sxip_membersite', ''));
+  $req->uri(url('sxip/in', NULL, NULL, TRUE));
+  
+  /** The CGI session ID needs to be sent in GET because it cannot
+   *  be read form the cookie in some browsers.
+   *  The string gets escaped again by logout() so it needs the initial
+   *  ampersand unescaped and needs to be http:// if it is https://
+   */
+  $uri = url('sxip/out', ini_get("session.name")."=".session_id(), NULL, TRUE);
+  $uri = str_replace("&amp;","&",$uri);
+  $uri = preg_replace("/^https:/","http:",$uri);
+  $req->logout($uri);
+  
+  $req->protocol(variable_get("sxip_protocol",DEFAULT_PROTOCOL));
+  $req->command((variable_get("sxip_xml_support",DEFAULT_XML_SUPPORT)) ? "loginx" : "login");
+  $req->explanation('Authenticating '.variable_get('site_name',''));
+  $req->buttonSrc(module_get_path('sxip') .'/images/sxip_in.png');
+  /**
+   * This tells the sxip/in callback which page to return to after
+   * a successful sxip in.
+   */
+  $req->addPass(array("name"=>"destination","value"=>$_GET['q']));
+  
+  /**
+   * Property requests
+   * Combine the list of required fetches with the list of mapped 
+   * fields (if the "profile" module is enabled), then iterate over 
+   * them setting a fetch request in the object for each one.
+   */ 
+  $fetches = array();
+  if (array_key_exists("profile",module_list())) {
+    foreach (_sxip_profile_fields() as $key => $value) {
+      if ($mapped = variable_get("sxip_profile_".$key,0)) {
+        $fetches["sxip_profile_".$key] = $mapped;
+      }
+    }
+  }
+  foreach ($fetches as $context => $property) {
+    $req->addFetch(array('context' => $context,
+               'property' => $property));
+  }
+  foreach (_sxip_required_fetches() as $context => $property) {
+    $req->addFetch(array('context' => $context,
+               'property' => $property."!requestMode=required"));
+  }
+  return $req->toForm();
+}
+
+/**
+ * The easy job, generates the [sxip out] form, no brain required.
+ */
+function _sxip_sxipout_form() {
+  $req = new SXIP_Request_Logout();
+  $req->formAction("https://".$_SESSION['command_path']);
+  $req->membersite(variable_get('sxip_membersite', ''));
+  $req->buttonSrc(module_get_path('sxip') .'/images/sxip_out.png');
+  
+  return $req->toForm();
+}
+
+/**
+ * Gets a list of profile fields available to be mapped.
+ */
+function _sxip_profile_fields() {
+  $output = array();  
+  $result = db_query("SELECT fid, title FROM {profile_fields} WHERE type = 'textfield' OR type = 'url' OR type='textarea'");
+  while ($row = db_fetch_object($result)) {
+  $output[$row->fid] = $row->title;
+  }
+  return $output;
+}
+
+/**
+ * Gets the value of a user's profile field.
+ */
+function _sxip_profile_get($uid, $fid) {
+  return db_result(db_query("SELECT value FROM {profile_values} WHERE fid=%d AND uid=%d", $fid, $uid));
+}
+
+/**
+ * Sets the value of a user's profile field.
+ */
+function _sxip_profile_set($uid, $fid, $value) {
+  if (!$uid || !$fid || !$value) {
+  return;
+  }
+  db_query("DELETE FROM {profile_values} WHERE fid = %d AND uid = %d", $fid, $uid);
+  db_query("INSERT INTO {profile_values} (fid, uid, value) VALUES (%d, %d, '%s')", $fid, $uid, $value);
+}
+
+/**
+ * Returns a list of the required fetches.
+ * Only exists because I didn't feel like learning how Drupal
+ * wants me to make a variable global.
+ */
+function _sxip_required_fetches() {
+  return array("first_name" => "/sxip/namePerson/first",
+         "last_name" => "/sxip/namePerson/last",
+         "nick" => "/sxip/namePerson/friendly",
+         "email" => "/sxip/contact/internetAddresses/verifiedEmail");
+}
+
+/**
+ * Returns a list of the available properties.
+ * Only exists because I didn't feel like learning how Drupal
+ * wants me to make a variable global.
+ */
+function _sxip_properties() {
+  /**
+   * These are all the properties that are requestable at the moment
+   * ideally these should be read from a file or some other source so
+   * that they are easier to update and keep in sync
+   */
+  $items = array("/sxip/namePerson/prefix"=>"/sxip/namePerson/prefix",
+                 "/sxip/namePerson/first"=> "/sxip/namePerson/first",
+                 "/sxip/namePerson/middle"=> "/sxip/namePerson/middle",
+                 "/sxip/namePerson/last"=> "/sxip/namePerson/last",
+                 "/sxip/namePerson/suffix"=> "/sxip/namePerson/suffix",
+                 "/sxip/namePerson/friendly"=> "/sxip/namePerson/friendly",
+                 "/sxip/contact/phone/home"=> "/sxip/contact/phone/home",
+                 "/sxip/contact/phone/work"=> "/sxip/contact/phone/work",
+                 "/sxip/contact/phone/cell"=> "/sxip/contact/phone/cell",
+                 "/sxip/contact/phone/fax"=> "/sxip/contact/phone/fax",
+                 "/sxip/contact/IM/AIM"=> "/sxip/contact/IM/AIM",
+                 "/sxip/contact/IM/ICQ"=> "/sxip/contact/IM/ICQ",
+                 "/sxip/contact/IM/MSN"=> "/sxip/contact/IM/MSN",
+                 "/sxip/contact/IM/Yahoo"=> "/sxip/contact/IM/Yahoo",
+                 "/sxip/contact/internetAddresses/email"=> "/sxip/contact/internetAddresses/email",
+                 "/sxip/contact/internetAddresses/verifiedEmail"=> "/sxip/contact/internetAddresses/verifiedEmail",
+                 "/sxip/contact/internetAddresses/verifiedEmailHash"=> "/sxip/contact/internetAddresses/verifiedEmailHash",
+                 "/sxip/contact/internetAddresses/web"=> "/sxip/contact/internetAddresses/web",
+                 "/sxip/contact/address/home/streetLine1"=> "/sxip/contact/address/home/streetLine1",
+                 "/sxip/contact/address/home/streetLine2"=> "/sxip/contact/address/home/streetLine2",
+                 "/sxip/contact/address/home/streetLine3"=> "/sxip/contact/address/home/streetLine3",
+                 "/sxip/contact/address/home/city"=> "/sxip/contact/address/home/city",
+                 "/sxip/contact/address/home/postal-zip"=> "/sxip/contact/address/home/postal-zip",
+                 "/sxip/contact/address/home/state-province"=> "/sxip/contact/address/home/state-province",
+                 "/sxip/contact/address/home/country"=> "/sxip/contact/address/home/country",
+                 "/sxip/contact/address/work/streetLine1"=> "/sxip/contact/address/work/streetLine1",
+                 "/sxip/contact/address/work/streetLine2"=> "/sxip/contact/address/work/streetLine2",
+                 "/sxip/contact/address/work/streetLine3"=> "/sxip/contact/address/work/streetLine3",
+                 "/sxip/contact/address/work/city"=> "/sxip/contact/address/work/city",
+                 "/sxip/contact/address/work/postal-zip"=> "/sxip/contact/address/work/postal-zip",
+                 "/sxip/contact/address/work/state-province"=> "/sxip/contact/address/work/state-province",
+                 "/sxip/contact/address/work/country"=> "/sxip/contact/address/work/country",
+                 "/sxip/contact/address/billTo/streetLine1"=> "/sxip/contact/address/billTo/streetLine1",
+                 "/sxip/contact/address/billTo/streetLine2"=> "/sxip/contact/address/billTo/streetLine2",
+                 "/sxip/contact/address/billTo/streetLine3"=> "/sxip/contact/address/billTo/streetLine3",
+                 "/sxip/contact/address/billTo/city"=> "/sxip/contact/address/billTo/city",
+                 "/sxip/contact/address/billTo/postal-zip"=> "/sxip/contact/address/billTo/postal-zip",
+                 "/sxip/contact/address/billTo/state-province"=> "/sxip/contact/address/billTo/state-province",
+                 "/sxip/contact/address/billTo/country"=> "/sxip/contact/address/billTo/country",
+                 "/sxip/contact/address/receiptTo/streetLine1"=> "/sxip/contact/address/receiptTo/streetLine1",
+                 "/sxip/contact/address/receiptTo/streetLine2"=> "/sxip/contact/address/receiptTo/streetLine2",
+                 "/sxip/contact/address/receiptTo/streetLine3"=> "/sxip/contact/address/receiptTo/streetLine3",
+                 "/sxip/contact/address/receiptTo/city"=> "/sxip/contact/address/receiptTo/city",
+                 "/sxip/contact/address/receiptTo/postal-zip"=> "/sxip/contact/address/receiptTo/postal-zip",
+                 "/sxip/contact/address/receiptTo/state-province"=> "/sxip/contact/address/receiptTo/state-province",
+                 "/sxip/contact/address/receiptTo/country"=> "/sxip/contact/address/receiptTo/country",
+                 "/sxip/birthDate/birthYear"=> "/sxip/birthDate/birthYear",
+                 "/sxip/birthDate/birthMonth"=> "/sxip/birthDate/birthMonth",
+                 "/sxip/birthDate/birthDay"=> "/sxip/birthDate/birthDay",
+                 "/sxip/graphic/smallURI"=> "/sxip/graphic/mediumURI",
+                 "/sxip/graphic/mediumURI"=> "/sxip/graphic/largeURI",
+                 "/sxip/graphic/largeURI"=> "/sxip/graphic/largeURI",
+                 );
+  return $items;
+}
+
+/**
+ * A function to check the include path for a file, 
+ * grabbed from aidan.dotgeek.org
+ */
+function file_exists_incpath($file) {
+  $paths = explode(PATH_SEPARATOR, get_include_path());
+  foreach ($paths as $path) {
+    $fullpath = $path.DIRECTORY_SEPARATOR.$file;
+    if (file_exists($fullpath)) {
+      return true;
+    }
+  }
+  return false;
+}
+?>

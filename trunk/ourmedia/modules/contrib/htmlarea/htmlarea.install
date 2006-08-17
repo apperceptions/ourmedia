@@ -1,0 +1,89 @@
+<?php
+
+function htmlarea_install() {
+  $query = "
+CREATE TABLE {htmlarea} (
+  textarea varchar(255) NOT NULL default '',
+  status tinyint(4) unsigned NOT NULL default '0',
+  PRIMARY KEY  (textarea)
+) TYPE=MyISAM;
+";
+
+  db_query($query);
+
+  // TOOLBAR
+  $toolbar = array(
+		   array("data" => "fontname", "weight" => "0", "enabled" => "0"), 
+		   array("data" => "fontsize", "weight" => "0", "enabled" => "0"), 
+		   array("data" => "formatblock", "weight" => "0", "enabled" => "0"), 
+		   array("data" => "bold", "weight" => "1", "enabled" => "1"), 
+		   array("data" => "italic", "weight" => "1", "enabled" => "1"), 
+		   array("data" => "underline", "weight" => "1", "enabled" => "1"), 
+		   array("data" => "strikethrough", "weight" => "2", "enabled" => "1"), 
+		   array("data" => "separator", "weight" => "2", "enabled" => "1"), 
+		   array("data" => "subscript", "weight" => "2", "enabled" => "0"), 
+		   array("data" => "superscript", "weight" => "2", "enabled" => "0"), 
+		   array("data" => "separator", "weight" => "3", "enabled" => "1"), 
+		   array("data" => "copy", "weight" => "4", "enabled" => "1"), 
+		   array("data" => "cut", "weight" => "4", "enabled" => "1"), 
+		   array("data" => "paste", "weight" => "4", "enabled" => "1"), 
+		   array("data" => "undo", "weight" => "4", "enabled" => "1"), 
+		   array("data" => "redo", "weight" => "5", "enabled" => "1"), 
+		   array("data" => "removeformat", "weight" => "5", "enabled" => "0"), 
+		   array("data" => "killword", "weight" => "6", "enabled" => "0"), 
+		   array("data" => "justifyleft", "weight" => "6", "enabled" => "1"), 
+		   array("data" => "justifycenter", "weight" => "7", "enabled" => "1"), 
+		   array("data" => "justifyright", "weight" => "7", "enabled" => "1"), 
+		   array("data" => "justifyfull", "weight" => "8", "enabled" => "1"), 
+		   array("data" => "linebreak", "weight" => "8", "enabled" => "1"), 
+		   array("data" => "separator", "weight" => "3", "enabled" => "0"), 
+		   array("data" => "orderedlist", "weight" => "8", "enabled" => "1"), 
+		   array("data" => "unorderedlist", "weight" => "8", "enabled" => "1"), 
+		   array("data" => "outdent", "weight" => "9", "enabled" => "1"), 
+		   array("data" => "indent", "weight" => "10", "enabled" => "1"), 
+		   array("data" => "separator", "weight" => "10", "enabled" => "1"), 
+		   array("data" => "forecolor", "weight" => "11", "enabled" => "1"), 
+		   array("data" => "hilitecolor", "weight" => "11", "enabled" => "0"), 
+		   array("data" => "textindicator", "weight" => "11", "enabled" => "0"), 
+		   array("data" => "separator", "weight" => "12", "enabled" => "1"), 
+		   array("data" => "createlink", "weight" => "13", "enabled" => "1"), 
+		   array("data" => "insertimage", "weight" => "13", "enabled" => "1"), 
+		   array("data" => "inserttable", "weight" => "13", "enabled" => "1"), 
+		   array("data" => "inserthorizontalrule", "weight" => "14", "enabled" => "1"), 
+		   array("data" => "htmlmode", "weight" => "15", "enabled" => "1"), 
+		   array("data" => "popupeditor", "weight" => "15", "enabled" => "1"), 
+		   array("data" => "showhelp", "weight" => "15", "enabled" => "0"), 
+		   array("data" => "about", "weight" => "16", "enabled" => ""));  
+
+  variable_set('htmlarea_toolbar', $toolbar);
+
+  // PLUGINS
+  $plugins = array('ContextMenu' => 1,
+		   'EnterParagraphs' => 1,
+		   'ListType' => 1,
+		   'UploadDocuments' => 1,
+		   'UploadImage' => 1);
+  variable_set('htmlarea_plugins', $plugins);
+  
+  // don't turn on htmlarea everywhere by default
+  variable_set('htmlarea_default', 0);
+  variable_set('htmlarea_killwordonpaste', 1);
+
+  // set default textareas
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/blog.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/book.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/forum.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/page.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/poll.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/story.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/event.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/image.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/quotes.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/survey.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/add/weblink.body', 1)");
+  
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('node/edit.body', 1)");
+  db_query("INSERT INTO {htmlarea} (textarea, status) VALUES ('comment/reply.comment', 1)");
+  
+}
+?>

@@ -1,0 +1,7 @@
+taxonomy_context.module
+TODO
+
+- change the method of displaying terms from the _help hook to
+  something more logical. If hook_taxonomy gets the new 'view' $op, it
+  could be used instead.
+

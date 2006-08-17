@@ -1,0 +1,9 @@
+<?php
+
+function quotes_install() {
+  require_once(dirname(__FILE__) . '/quotes.module');
+  require_once(dirname(__FILE__) . '/install.inc');
+  _quotes_install();
+}
+
+?>

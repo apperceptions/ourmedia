@@ -1,0 +1,13 @@
+#
+# Table structure for table `text`
+#
+
+DROP TABLE IF EXISTS text;
+CREATE TABLE text (
+  nid int(10) NOT NULL default '0',
+  text_fileid int(10) default NULL,
+  photo_fileid int(10) default NULL,
+  photo_credit varchar(255) default NULL,
+  file_size varchar(255) default NULL,
+  textformat varchar(255) default NULL
+) TYPE=MyISAM;

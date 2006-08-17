@@ -1,0 +1,235 @@
+<?php
+$fid_photo = -1;
+$fid_media = -1;
+require_once "ourmedia.php";
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function audiomedia_nodeapi($node, $op, $arg) {
+  return ourmedia_nodeapi($node, $op, 'audiomedia');
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function audiomedia_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Enables users to publish audios.');
+    case 'node/add#audio':
+      return t("Publish a audio and enter all other metadata information about it.");
+  }
+}
+
+/**
+ * Implementation of hook_node_name().
+ */
+function audiomedia_node_name($node) {
+  return t('audio');
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function audiomedia_perm() {
+  return array('publish audios', 'edit own audios');
+}
+
+/**
+ * Implementation of hook_access().
+ */
+function audiomedia_access($op, $node) {
+  global $user;
+
+  if ($op == 'create') {
+    return user_access('publish audios');
+  }
+
+  if ($op == 'update' || $op == 'delete') {
+    if (user_access('edit own audios') && ($user->uid == $node->uid)) {
+      return TRUE;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_link().
+*/
+function audiomedia_link($type, $node = 0, $main) {
+  $links = array();
+  if ($type == 'node' && $node->type == 'audiomedia') {
+    // Don't display a redundant edit link if they are node administrators.
+    if (audiomedia_access('update', $node) && !user_access('administer nodes')) {
+      $links[] = l(t('edit this audio'), "node/$node->nid/edit");
+    }
+  }
+  return $links;
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function audiomedia_menu($may_cache) {
+  $items = array();
+  if ($may_cache) {
+    $items[] = array('path' => 'node/add/audiomedia', 'title' => t('audio'),
+    'access' => audiomedia_access('create', NULL));
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_validate().
+ */
+function audiomedia_validate($node) {
+  return ourmedia_validate($node,'audiomedia');
+}
+
+/**
+ * specifies the valid audio files
+ */
+function get_audio_supported_filemime() {
+  return array(
+    'audio/mpeg',
+    'audio/x-ms-wax',
+    'audio/x-ms-wma',
+    'audio/x-pn-realaudio',
+    'audio/x-realaudio',
+    'audio/x-aiff',
+    'audio/x-mp3'
+  );
+}
+
+/**
+ * Validates the audio url
+ */
+function validate_audio_url($node, $fileid_type) {
+  return validate_url($node, $fileid_type,'audiomedia'); 
+}
+    
+/**
+ * Implementation of hook_form().
+ */
+function audiomedia_form(&$node, &$param) {
+  return ourmedia_mediaform(&$node, &$param , 'audiomedia');
+}
+
+/**
+ * Generates audio fields values
+*/
+function get_audio_field_value($node, $field) {
+  return get_ourmedia_field_value($node, $field,'audiomedia'); 
+}
+  
+/**
+ * Generates audio specific fields
+ */
+function get_audio_specific_fields($node) {
+  return get_ourmedia_specific_fields($node,'audiomedia');
+}
+ 
+/**
+ * Generates audio taxonomy
+ */
+function get_audio_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy') {
+  return get_ourmedia_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy'); 
+}
+
+/**
+ * Implementation of hook_content().
+ */
+function audiomedia_content($node, $main = 0) {
+  return node_prepare($node, $main);
+}
+
+/**
+ * Implementation of hook_load().
+ */
+function audiomedia_load($node) {
+  global $fid_audio;
+  global $fid_photo;
+  $output = array();
+  $result = db_query("SELECT * FROM {audio} where nid = %d", $node->nid);
+  if($result) {
+    $output = db_fetch_object($result);
+    $fid_audio = $output->audio_fileid;
+    $fid_photo = $output->photo_fileid;
+    $output->audiourl = '';
+    $output->photourl = '';
+    $audiourl_result = db_query("SELECT filepath from {files} where fid = %d", $output->audio_fileid);
+    if ($audiourl_result && db_num_rows($audiourl_result) > 0) {
+      $output->audiourl = file_create_url(db_result($audiourl_result));
+    }
+    $photo_result = db_query("SELECT filepath from {files} where fid = %d", $output->photo_fileid);
+    if ($photo_result && db_num_rows($photo_result) > 0) {
+      $output->photourl = file_create_url(db_result($photo_result));
+    }
+  }
+  $returns = array('audio' => $output);
+  return $returns;
+}
+
+/**
+ * Implementation of hook_view()
+ */
+function audiomedia_view(&$node, $teaser) {
+  return ourmedia_view(&$node, $teaser,'audiomedia'); 
+}
+
+/**
+ * Generates theme for the page
+ */
+function theme_audio_view($node, $audio_data, $audio_metadata, $audio_taxonomy) {
+  $output =  theme_ourmedia_view($node, $video_data, $video_metadata, $media_taxonomy,'audiomedia');
+  $output = theme('box', 'audio', $output);
+  if (isset($audio_metadata)) {
+    foreach ($audio_metadata as $audio_fields) {
+      if ($audio_fields) {
+        $output_metadata .= "<div><b>" . $audio_fields['title'] . "</b>: " . $audio_fields['value'] ."</div>";
+      }
+  }
+  $output .= theme('box', 'Other Metadata', $output_metadata);
+ }
+  return $output;
+}
+
+/**
+ * Display audio
+ */
+function show_audio($audio_fields_all) {
+  $mediaURL = $audio_fields_all->audiourl;
+  $extension = '';
+  $parts = split('\.', $mediaURL);
+  if (count($parts) > 1) $extension = end($parts);
+	if (!$extension && count($parts) > 2) $ext = prev($parts);
+  if ($extension == "rm" || $extension == 'ram') {
+	$output = "<center><embed type=\"audio/x-pn-realaudio-plugin\" src=\"$mediaURL\" width=320 height=270 controls=ImageWindow console=one autostart=true></embed></center>";
+  }
+  else {
+    $output = "<embed src=\"$mediaURL\" width=320 height=270 autoplay=false controller=true enablejavascript=true></embed>";
+  }
+  return $output;
+}
+
+/**
+ * Implementation of hook_insert().
+ */
+function audiomedia_insert($node) {
+  return ourmedia_insert($node,'audiomedia');
+}
+   
+/**
+ * Implementation of hook_update().
+ */
+function audiomedia_update($node) {
+  return ourmedia_update($node,'audiomedia');
+}
+
+/**
+ * Implementation of hook_delete().
+ */
+function audiomedia_delete($node) {
+  db_query('DELETE FROM {audio} WHERE nid = %d', $node->nid);
+}
+?>

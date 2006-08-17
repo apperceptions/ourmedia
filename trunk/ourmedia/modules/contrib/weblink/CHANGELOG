@@ -1,0 +1,149 @@
+01 March 2004
+-------------
+
+Changes by Goba:
+
+ - reordered functions, so the order makes sense
+ - removed a lot of repeated code
+ - fixed redirection bug
+ - added admin option to disable monitoring alltogether
+ - added admin option to specify default link target and
+   disable that user setting
+ - removed taxonomy links from node link list, since
+   this is a theme task
+ - added option to only print the 'visit' word on the visit link
+ - use the latest Drupal technology (like drupal_map_assoc())
+ - fixed a lot of crap in the weblink_form function
+   (error handling, teaser editing, etc).
+ - made compatible with latest bookmarks.module functionality
+   to add external URLs listed in the weblinks registry to the
+   bookmarks list with a click
+   
+18th November 2003:
+-------------------
+
+Merged Adrian's improvements with enhancements/bugfixes
+from September 2003 - present, among them support for the new theme system.
+Also added compose_tips message. (TDobes)
+
+17th November 2003:
+-------------------
+
+Adrian's improvements:
+1) cleaned up html.
+2) postgres support.
+3) a new latest weblinks block
+4) the ability to specify how many links to show in blocks
+5) integration with simon lindsay weblink monitoring code. This module now supercedes cloud.module
+6) a load of bug fixes.
+7) supports drupal 4.3.0 menu and help functions.
+8) a new [weblink:] filter
+
+14th November 2003:
+------------------
+
+Fix the module to be in line with the latest theme changes,
+group themeable functions, and add doxygen comments. (Goba)
+
+11th November 2003:
+-------------------
+
+Html validity fix by Goba
+
+10th November 2003:
+-------------------
+
+Support table prefixes for compatibility with Drupal 4.3 by Axel
+
+9th July 2002:
+--------------
+
+Applied marco's fixs:
+ - deleted unused globals
+ - fixed a few queries
+ - removed a filter() call
+
+7th July 2002:
+--------------
+
+Applied unlimited vocabulary patch by Julio
+
+2nd July 2002:
+--------------
+
+A few updates by Simon, can now handle taxonomy better
+
+12th June 2002:
+---------------
+
+Fixed a small bug (Thanks Kristjan)
+
+
+
+9th May 2002:
+-------------
+
+added _system function
+cosmetic change to configuration page
+all a tags replaced with lm()'s
+small bugfix to the block
+
+2nd May 2002:
+-------------
+
+a small cosmetic fix to the _form function
+
+26 April 2002:
+--------------
+
+fixed an error where on displaying nodes it would show all nodes not just weblinks
+
+the rest was really just cosmetic stuff:
+ moved the click counter out of the a tag
+ module now passes the code-style script
+
+25 April 2002:
+--------------
+
+one step closer to a full directory system 
+(doesn't support having > 1 vocabulary or vocabularies with terms deeper than 1 level, yet)
+
+90% of links are called using lm() 
+(the few that don't require target="_blank")
+
+added a top 10 links block
+
+module ran through coding standards script
+
+19 April 2002:
+--------------
+
+a few ui issues suggested by moshe:
+
+added some help text on the submission form.
+added a title to the link
+the link in the node links bar is configurable under admin interface to either display title or url
+
+18 April 2002: Part 2:
+----------------------
+
+added a check to make sure the user has "post content" rights
+the module now complys with drupal's coding standards
+support for taxonomy module
+
+
+18 April 2002:
+--------------
+
+Nodes were reverse order in node_page_default() i added a DESC to the SQL statement to sort it.
+
+11 April 2002:
+--------------
+
+slight code tidy up
+click-through counter (in need of a better name)
+
+03 April 2002:
+--------------
+
+Initial release.

@@ -1,0 +1,10 @@
+ALTER TABLE weblink ADD monitor int(1) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD size text NOT NULL DEFAULT '' ;
+ALTER TABLE weblink ADD change_stamp int(11) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD checked int(11) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD feed varchar(255) NOT NULL DEFAULT '' ;
+ALTER TABLE weblink ADD refresh int(11) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD threshold int(11) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD spider_site int(1) NOT NULL DEFAULT '0' ;
+ALTER TABLE weblink ADD spider_url varchar(255) NOT NULL DEFAULT '' ;
+ALTER TABLE weblink ADD INDEX url (weblink);

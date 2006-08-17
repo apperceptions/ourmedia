@@ -1,0 +1,652 @@
+<?php
+// $Id: copyright.module,v 1.4 2005/01/07 01:10:14 veridicus Exp $
+
+/** Copyright (c) 2004 Matthew Schwartz  <matt at mattschwartz dot net>
+    Contributors: dries - code from taxonomy.module
+    
+    This file is a contributed module of Drupal.
+
+    Drupal and this module are free software; you can redistribute this file
+    and/or modify it under the terms of the GNU General Public License as 
+    published by the Free Software Foundation; either version 2 of the License,
+    or (at your option) any later version.
+
+    This file is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this file; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+*/
+
+/**
+ * @file
+ * Assign copyright licenses to site and nodes.
+ */
+
+/**
+ * Implementation of hook_perm().
+ */
+function copyright_perm() {
+  return array('administer copyright');
+}
+ 
+/**
+ * Implementation of hook_menu().
+ */
+function copyright_menu($may_cache) {
+  $items = array();
+ 
+  if ($may_cache) {
+    $items[] = array('path' => 'admin/copyright', 'title' => t('copyright'),
+      'callback' => 'copyright_admin',
+      'access' => user_access('administer copyright'));
+
+    $items[] = array('path' => 'admin/copyright/site', 'title' => t('configure'),
+      'type' => MENU_DEFAULT_LOCAL_TASK, 'weight' => 10);
+
+    $items[] = array('path' => 'admin/copyright/list', 'title' => t('list'),
+      'type' => MENU_LOCAL_TASK, 'weight' => 1);
+
+    $items[] = array('path' => 'admin/copyright/add', 'title' => t('add'),
+      'type' => MENU_LOCAL_TASK, 'weight' => 2);
+     
+    $paths = copyright_get_license_local_paths();
+    foreach ($paths as $path) {
+        $items[] = array('path' => $path->source_url, 'title' => t($path->name), 'type' => MENU_CALLBACK, 
+          'callback' => 'copyright_show_license', 'callback arguments' => array($path->cpyid),
+          'access' => user_access('access content'));
+    }
+  }
+
+  //include CSS 
+  if (strstr($_GET['q'], 'node/') && strstr($_GET['q'], '/add') || strstr($_GET['q'], '/edit')) {
+    $head = '<style type="text/css">@import url('. module_get_path('copyright') ."/copyright.css);</style>\n";
+    drupal_set_html_head($head);
+  }
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_block().
+ *
+ * Generates a block with site copyright
+ *
+ * NOTE: Maybe in the future have this check if the currently displayed node is using
+ * a license other than the site default and display that in its place. The trick would
+ * then be to *not* also display the text at the bottom of the node. It needs to be an admin setting.
+ */
+function copyright_block($op = 'list', $delta = 0) {
+  if ($op == 'list') {
+    $blocks[0]['info'] = t('Site Copyright');
+    return $blocks;
+  }
+  else {
+    $block['subject'] = t('Copyright');
+    $default = variable_get('copyright_default', 0);
+    if ($default == 0) {
+      $block['content'] = t('Please select a default site copyright.');
+    }
+    else {
+      $license = copyright_get_license($default);
+      $block['content'] = theme('copyright_block', copyright_notice($license));
+    }
+    return $block;
+  }
+}
+
+/**
+ * Implementation of hook_footer().
+ *
+ * Generates copyright notice at footer of every page if the option was set
+ *
+ * NOTE: Maybe in the future have this check if the currently displayed node is using
+ * a license other than the site default and display that in its place. The trick would
+ * then be to *not* also display the text at the bottom of the node. It needs to be an admin setting.
+ */
+function copyright_footer($main = 0) {
+  /*$footer = '';
+  if (variable_get('copyright_footer', 0)) {
+    $license = copyright_get_license(variable_get('copyright_default', 1));
+    $footer = theme('copyright_footer', copyright_notice($license));
+  }*/
+  return $footer;
+}
+
+
+/******************************************************************
+ * Copyright/license manipulation
+ ******************************************************************/
+
+/**
+ * Form for creating and editing a copyright/license
+ */
+function copyright_form_license($edit = array()) {
+  $form .= form_textfield(t('Copyright/License name'), 'name', $edit['name'], 50, 60, t('Short name'), NULL, TRUE);
+  $form .= form_textarea(t('Description'), 'description', $edit['description'], 50, 5, ('Longer description'));
+  $form .= form_checkbox(t('Site copyright'), 'is_default', 1, (variable_get('copyright_default', 1) == $edit['cpyid'] ? 1 : 0), t('Set as the copyright/license for the site. Individual nodes can set a different license if desired.'));
+  $form .= form_textfield(t('Image URL'), 'image_url', $edit['image_url'], 50, 255, ('URL (relative or absolute) to an image associated with this copyright/license. If provided it will automatically be displayed along with the copyright notice.'));
+  $form .= form_textfield(t('Source URL'), 'source_url', $edit['source_url'], 50, 255, ('URL (relative or absolute) to the complete text or HTML of the copyright/license. To dynamically have a page created with the full license text below set a relative path without a leading backslash (e.g. "copyright").'));
+  $form .= form_textarea(t('Site notice'), 'site_notice', $edit['site_notice'], 60, 5, t('Notice displayed for entire site (in footer or block). HTML is allowed and variables include %year, %site, and %source_url.'), NULL, TRUE);
+  $form .= form_textarea(t('Node notice'), 'node_notice', $edit['node_notice'], 60, 5, t('Notice displayed for nodes which are not using the site default. HTML is allowed and variables include %year, %author, %site, and %source_url.'), NULL, TRUE);
+  $form .= form_textarea(t('Full copyright/license'), 'license', $edit['license'], 60, 20, t('The complete text or HTML of the copyright/license. Leave empty to use Source URL (above).'));
+
+  $form .= form_submit(t('Submit'));
+
+  if ($edit['cpyid']) {
+    $form .= form_submit(t('Delete'));
+    $form .= form_hidden('cpyid', $edit['cpyid']);
+  }
+
+  return form($form);
+}
+
+/**
+ * Save copyright/license
+ */
+function copyright_save_license($edit) {
+  if ($edit['cpyid'] && $edit['name']) {
+    if ($edit['is_default']) {
+      variable_set('copyright_default', $edit['cpyid']);
+    }
+    unset($edit['is_default']);
+    db_query('UPDATE {copyrights} SET '. _copyright_prepare_update($edit) .' WHERE cpyid = %d', $edit['cpyid']);
+    module_invoke_all('copyright', 'update', 'license', $edit);
+    $message = t('Updated copyright/license %name.', array('%name' => '<em>'. $edit['name'] .'</em>'));
+  }
+  else if ($edit['cpyid']) {
+    if (variable_get('copyright_default', 0) == $edit['cpyid']) {
+      $message = t('The default copyright/license can not be deleted.  Please set another as the default, then delete.');
+    }
+    else {
+      $message = copyright_del_license($edit['cpyid']);
+    }
+  }
+  else {
+    // New copyright
+    $edit['cpyid'] = db_next_id('{copyrights}_cpyid');
+    $default = $edit['is_default'];
+    unset($edit['is_default']);
+    db_query('INSERT INTO {copyrights} '. _copyright_prepare_insert($edit, 1) .' VALUES '. _copyright_prepare_insert($edit, 2));
+    if ($default) {
+      variable_set('copyright_default', $edit['cpyid']);
+    }
+    module_invoke_all('copyright', 'insert', 'license', $edit);
+    $message = t('Created new copyright/license %name.', array('%name' => '<em>'. $edit['name'] .'</em>'));
+  }
+
+  cache_clear_all();
+
+  drupal_set_message($message);
+
+  return $edit;
+}
+
+/**
+ * Delete copyright/license
+ */
+function copyright_del_license($cpyid) {
+  $copyright = copyright_get_license($cpyid);
+
+  db_query('DELETE FROM {copyrights} WHERE cpyid = %d', $cpyid);
+  db_query('DELETE FROM {copyright_node} WHERE cpyid = %d', $cpyid);
+
+  cache_clear_all();
+
+  return t('Deleted copyright "%name". All nodes set to that copyright have been set back to the site default.', array('%name' => $copyright->name));
+}
+
+function _copyright_confirm_del_license($cpyid) {
+  $copyright = copyright_get_license($cpyid);
+
+  $form .= form_hidden('confirm', 1);
+  $form .= form_hidden('type', 'copyright');
+  $form .= form_hidden('cpyid', $cpyid);
+  $form .= form_submit(t('Delete'));
+
+  return form(form_item(t('Delete copyright/license "%name"', array('%name' => $copyright->name)), $form, t('Are you sure you want to delete the copyright/license?')));
+}
+
+
+/******************************************************************
+ * Main admin
+ ******************************************************************/
+
+/**
+ * Main admin page.
+ * Let admin choose settings for the site
+ */
+function copyright_form_site() {
+  $form .= form_select(t('Site copyright'), 'site_copyright',  variable_get('copyright_default', 1), copyright_get_license_names(), t('The copyright/license for the site. Individual nodes (of types chosen below) can set a different license if desired.'), 0, FALSE, TRUE);
+  $form .= form_checkbox(t('Show copyright notice at site footer'), 'show_footer', 1, variable_get('copyright_footer', 1), t('Show the copyright notice at the footer of every page.'));
+
+  foreach (node_list() as $type) {
+    $nodetypes[$type] = node_invoke($type, 'node_name');
+  }
+  $form .= form_checkboxes(t('Node types allowing individual copyright selection'), 'nodes', explode(',', variable_get('copyright_nodetypes', '')), $nodetypes, t('Node types for which posters can choose their own copyright/license from the list of defined licenses.'));
+
+  $form .= form_hidden('edittype', 'site');
+  $form .= form_submit(t('Submit'));
+  return form($form);
+}
+
+/**
+ * Save site-wide copyright settings
+ */
+function copyright_save_site($edit) {
+  variable_set('copyright_default', $edit['site_copyright']);
+  variable_set('copyright_footer', $edit['show_footer']);
+  if (!$edit['nodes']) {
+    $edit['nodes'] = array();
+  }
+  variable_set('copyright_nodetypes', implode(',', $edit['nodes']));
+  cache_clear_all();
+  drupal_set_message(t('Site-wide copyright settings saved.'));
+  return $edit;
+}
+
+
+/**
+ * Form for selecting copyright to edit
+ */
+function copyright_form_select() {
+  $licenses = copyright_get_licenses();
+
+  foreach ($licenses as $license) {
+    $rows[] = array(l(t($license->name), "admin/copyright/edit/$license->cpyid"), t($license->description));
+  }
+
+  return t('Select a copyright/license to edit') . theme('table', array(t('Name'), t('Description')), $rows);
+}
+
+
+/******************************************************************
+ * Copyright/license node association
+ ******************************************************************/
+
+/**
+ * Save copyright associated with a given node.
+ */
+function copyright_node_save($nid, $cpyid, $children_show_notice = 1) {
+  // If the new copyright setting is different than the old
+  // or it's being set to the default, delete the association if it exists
+  if ($cpyid ==  variable_get('copyright_default', 0)) {
+    copyright_node_delete($nid);
+  }
+//  else {
+    $license = copyright_get_node_license($nid);
+    if ($license->cpyid) {
+      db_query('UPDATE {copyright_node} SET cpyid=%d, children_show_notice=%d WHERE nid=%d', $cpyid, $children_show_notice, $nid);
+    }
+    else {
+      db_query('INSERT INTO {copyright_node} (nid, cpyid, children_show_notice) VALUES (%d, %d, %d)', $nid, $cpyid, $children_show_notice);
+    }
+//  }
+}
+
+/**
+ * Remove associations of a node to its copyright.
+ */
+function copyright_node_delete($nid) {
+  db_query('DELETE FROM {copyright_node} WHERE nid = %d', $nid);
+}
+
+/** 
+ * Create the form for copyright selection within a node
+ */
+function copyright_node_form($node) {
+  $licenses = copyright_get_license_fields();
+  $default =  variable_get('copyright_default', 0);
+  if($default > count($licenses)) {
+    $default = 0;
+  }
+  //$licenses[$default] .= ' (Site default)';
+  $counter = 0;
+  foreach ($licenses as $lid => $license) {
+    $title = $license['name'];
+    $description = $license['description'];
+    $source_url = $license['source_url'];
+    $checked = FALSE;
+    if($node->cpyid) {
+      if($node->cpyid == $lid) {
+        $checked = TRUE;
+      }
+    }
+    else {
+      if($counter == $default) {
+        $checked = TRUE;
+      }
+    }
+    $group .= "<div style=\"width: 50%; float: left;\">" . form_radio("<a title=\"$description\">" . t($title) . "</a> " . ($source_url ? "<a href=\"$source_url\" target=\"_blank\">" . t('View license') ."</a>" : NULL), 'cpyid', $lid, $checked) . "</div>";
+    $counter++;
+  }
+  $group = '<div class="radioselector">' . $group . '</div>';
+  $form = form_group(t('Copyright'), $group);
+  if ($node->type == 'book') {
+    $form .= form_checkbox(t('Show this copyright for children (if different than site default)'), 
+    'copyright_show_children', 1, $node->copyright_show_children);
+  }
+  return $form;
+}
+
+/**
+ * Return an array of all copyrights/licenses (id, name, description, source_url only)
+ */
+function copyright_get_license_fields() {
+  $result = db_query('SELECT cpyid, name, description, source_url FROM {copyrights} ORDER BY name');
+  $licenses = array();
+  while ($lic = db_fetch_object($result)) {
+    $licenses[$lic->cpyid] = array('name' =>$lic->name, 'description' => $lic->description, 'source_url' => $lic->source_url);
+  }
+
+  return $licenses;
+}
+
+
+/******************************************************************
+ * Copyrights/licenses retrieves
+ ******************************************************************/
+/**
+ * Return an array of all copyrights/licenses (id and name only)
+ */
+function copyright_get_license_names() {
+  $result = db_query('SELECT cpyid, name FROM {copyrights} ORDER BY name');
+  $licenses = array();
+  while ($lic = db_fetch_object($result)) {
+    $licenses[$lic->cpyid] = $lic->name;
+  }
+
+  return $licenses;
+}
+
+/**
+ * Return a single copyright/license object
+ */
+function copyright_get_license($cpyid) {
+  $result = db_query('SELECT * FROM {copyrights} WHERE cpyid=%d', $cpyid);
+  return db_fetch_object($result);
+}
+
+/**
+ * Return an array of copyright/license objects
+ */
+function copyright_get_licenses() {
+  $result = db_query('SELECT * FROM {copyrights} ORDER BY name');
+  $licenses = array();
+  while ($lic = db_fetch_object($result)) {
+    $licenses[$lic->cpyid] = $lic;
+  }
+
+  return $licenses;
+}
+
+/**
+ * Return cpyid and children_show_notice flag of license associated with a node
+ */
+function copyright_get_node_license($nid) {
+  $result = db_query('SELECT cpyid, children_show_notice FROM {copyright_node} WHERE nid=%d', $nid);
+  return db_fetch_object($result);
+}
+
+/**
+ * Return an array of local paths which will have license pages created by this module
+ */
+function copyright_get_license_local_paths() {
+  $result = db_query("SELECT cpyid, name, source_url FROM {copyrights} WHERE source_url NOT LIKE 'http:%' AND source_url NOT LIKE '\%'");
+  $licenses = array();
+  while ($lic = db_fetch_object($result)) {
+    $licenses[$lic->cpyid] = $lic;
+  }
+
+  return $licenses;
+}
+
+/**
+ * Return the cpyid of the nearest ancestor book page demanding its children show a copyright notice, 0 if none
+ * NOTE: This function relies on the book table (from the book module) existing and working as it has.
+ * It's unlikely that a change to the book module would break this, but it's possible.  This function
+ * won't be called unless a node to display is of type book, so we don't need to check for the book module's existence.
+ * I was going to use the book_location function from book.module but that would double the number of
+ * queries executed (after each of its queries I'd have to perform my own).  This is more efficient.
+ * Also note we don't check node_access (by calling node_access_join_sql) because even if the user doesn't
+ * have the right to access a parent we still want to show the parent's copyright on this page.
+ */
+function copyright_from_book_parent($nid_parent) {
+  $parent = db_fetch_object(db_query('SELECT n.nid, b.parent, c.cpyid, c.children_show_notice FROM {node} n INNER JOIN {book} b ON n.nid = b.nid LEFT OUTER JOIN {copyright_node} c ON n.nid = c.nid WHERE n.nid = %d', $nid_parent));
+  if ($parent->nid) {
+    if ($parent->cpyid) {
+      // Parent has its own copyright
+      if ($parent->children_show_notice) {
+        // and parent has chosen to show it
+        return $parent->cpyid;
+      }
+      else {
+        return 0;
+      }
+    }
+    else {
+      // Parent doesn't have its own cpyid set, but parent does exist, so look deeper
+      return copyright_from_book_parent($parent->parent);
+    }
+  }
+  // If we got here there is no parent, so stop looking
+  return 0;
+}
+
+
+/******************************************************************
+ * Database helper functions 
+ ******************************************************************/
+function _copyright_prepare_update($data) {
+  foreach ($data as $key => $value) {
+    if ($key != 'cpyid') {
+      if ($key{-4} == '_url') {
+        $value = check_url($value);
+      }
+      $q[] = "$key = '". str_replace('%', '%%', check_query($value)) ."'";
+    }
+  }
+  $result = implode(', ', $q);
+  return $result;
+}
+
+function _copyright_prepare_insert($data, $stage) {
+  if ($stage == 1) {
+    $result = implode(', ', array_keys($data));
+  }
+  else {
+    foreach (array_values($data) as $value) {
+      if ($key{-4} == '_url') {
+        $value = check_url($value);
+      }
+      // For some reason my inserts take %% as %% while my updates take %% as %... database setting?
+      //$q[] = "'". str_replace('%', '%%', check_query($value)) ."'";
+      $q[] = "'". check_query($value) ."'";
+    }
+    $result = implode(', ', $q);
+  }
+  return "($result)";
+}
+
+/******************************************************************
+ * Display functions (output text and themes)
+ ******************************************************************/
+
+/**
+ * Return a properly formatted display string for a copyright
+ */
+function copyright_notice($license, $node=NULL)
+{
+  $variables = array('%year', '%author', '%site', '%source_url');
+  if (is_null($node)) {
+    $notice = $license->site_notice;
+    $today = getdate();
+    $replacements = array($today['year'],
+                          '',
+                          variable_get('site_name', ''),
+                          $license->source_url);
+  }
+  else {
+    $notice = $license->node_notice;
+    $user = user_load(array('uid'=>$node->uid));
+    $replacements = array(format_date($node->created, 'custom', 'Y'),
+                          $user->name,
+                          variable_get('site_name', ''),
+                          $license->source_url);
+  }
+  $img = '';
+  if ($license->image_url) {
+    // Why won't this call to theme('image') (i.e. theme_image()) work??? I get back an empty string
+    // as if theme_image() isn't found, but it's there!
+    //$img = theme("image", $license->image_url, $license->description, $license->description, FALSE) . "<br/>";
+    //$img = theme($function="image", $path=$license->image_url, $getsize=FALSE) . "<br/>";
+    $img .= l('<img class="image" style="display:inline" src="' . $license->image_url . '" alt="[' . $license->description . ']" title="' . $license->description . '"/>', $license->source_url) . '<br/>';
+  }
+  return $img . t(str_replace($variables, $replacements, $notice));
+}
+
+/**
+ * Generate a complete license for display
+ */
+function copyright_show_license($cpyid) {
+  $license = copyright_get_license($cpyid);
+  print theme('page', $license->license);
+}
+
+/**
+ * For displaying a themed copyright notice in all page footers and the bottom of all nodes (can be overridden by themes/engines)
+ * The default is to center and dull the text.
+ */
+function theme_copyright_footer($notice)
+{
+  return "<br/>";
+/*
+  return '<div style="margin:4pt;font-size:smaller;font-weight:lighter">' . $notice . '</div>';*/
+}
+
+/**
+ * For displaying a themed copyright notice in a block (can be overridden by themes/engines)
+ * The default is to simply center.
+ */
+function theme_copyright_block($notice)
+{
+  return '<div style="text-align:center">' . $notice . '</div>';
+}
+
+/******************************************************************/
+/**
+ * Implementation of hook_nodeapi().
+ */
+function copyright_nodeapi(&$node, $op, $arg = 0) {
+  if (in_array($node->type, explode(',', variable_get('copyright_nodetypes', '')))) {
+    switch ($op) {
+      /*case 'form pre':
+        return copyright_node_form($node);*/
+      case 'load':
+        $license = copyright_get_node_license($node->nid);
+        if ($license->cpyid) {
+          return array('cpyid' => $license->cpyid, 'copyright_show_children' => $license->children_show_notice);
+        }
+        else {
+          return array('cpyid' => variable_get('copyright_default', 0), 'copyright_show_children' => 1);
+        }
+      case 'view':
+        if ($node->cpyid <>  variable_get('copyright_default', -1)) {
+          $node->body .= theme('copyright_footer', copyright_notice(copyright_get_license($node->cpyid), $node));
+        }
+        else if ($node->type == 'book') { //this is na incorrect assumption IMO. Any type can be in a book.
+          $cpyid = copyright_from_book_parent($node->parent);  // $node->parent set at node load time by book.module
+          if ($cpyid <> 0) {
+            $node->body .= theme('copyright_footer', copyright_notice(copyright_get_license($cpyid), $node));
+          }
+        }
+        break;
+      case 'insert':
+        copyright_node_save($node->nid, $node->cpyid, $node->copyright_show_children);
+        break;
+      case 'update':
+        copyright_node_save($node->nid, $node->cpyid, $node->copyright_show_children);
+        break;
+      case 'delete':
+        copyright_node_delete($node->nid);
+        break;
+    }
+  }
+}
+
+
+/**
+ * Menu callback; dispatches to the proper copyright administration function.
+ */
+function copyright_admin() {
+  $op = $_POST['op'];
+  $edit = $_POST['edit'];
+
+  if (empty($op)) {
+    $op = arg(2);
+  }
+
+  switch ($op) {
+    case 'add':
+      $output = copyright_form_license();
+      break;
+    case 'edit':
+      $output = copyright_form_license(object2array(copyright_get_license(arg(3))));
+      break;
+    case 'list':
+      $output = copyright_form_select();
+      break;
+    case t('Delete'):
+      if (!$edit['confirm']) {
+        $output = _copyright_confirm_del_license($edit['cpyid']);
+        break;
+      }
+      else {
+        $edit['name'] = 0;
+        // fall through:
+      }
+    case t('Submit'):
+      if ($edit['edittype']=='site') {
+        copyright_save_site($edit);
+        drupal_goto('admin/copyright');
+      }
+      else {
+        copyright_save_license($edit);
+        drupal_goto('admin/copyright/list');
+      }
+      break;
+    default:
+      $output = copyright_form_site();
+  }
+
+  print theme('page', $output);
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function copyright_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Site and node copyright management.');
+    case 'admin/copyright':
+      return t('The copyright module allows you to select a copyright for display on the site and each node.  Some common copyright options are built in.  You also have the option to create your own copyright/license.');
+    case 'admin/copyright/add':
+      return t('Create a new copyright/license to associate to the site and nodes.  Create your own custom license or paste information from common licenses, like those offered by <a href="http://www.creativecommons.org">Creative Commons</a>.');
+    case 'admin/help#copyright':
+      return t('
+      <h3>Copyright and Licenses</h3>
+      <p>All works created in the United States and some other countries are considered to have an exclusive copyright by default, even without a copyright notice present.  But it\'s generally good practice to assign a copyright to a web site by displaying a notice.  You have the option to reserve all rights, put it into the public domain, or provide a variety of licenses which fall between.  For many web sites it\'s often desirable to have different pages licensed in different ways, especially when the content is provided by more than one person or collected from other sources.</p>
+      <h3>Copyright Notices</h3>
+      <p>When creating notices for the site and pages, the following variables can be inserted (and will be replaced automatcially for display):<ul>
+      <li><b>{year}</b> - For a node it\'s the year of its creation, for the site it\'s the current year</li>
+      <li><b>{author}</b> - Applicable only to node notices, this is the author of the node</li>
+      <li><b>{site}</b> - Name of this Drupal site</li>
+      <li><b>{source_url}</b> - URL to the full license text</li>');
+  }
+}
+
+?>

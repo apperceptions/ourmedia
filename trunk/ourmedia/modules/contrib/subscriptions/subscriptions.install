@@ -1,0 +1,11 @@
+<?php
+function subscriptions_install() {
+  $query = "
+CREATE TABLE {subscriptions}(
+  sid int(10) unsigned not null,
+  uid int(10) unsigned not null,
+  stype varchar(4) not null
+ )";
+ db_query($query);
+}
+?>

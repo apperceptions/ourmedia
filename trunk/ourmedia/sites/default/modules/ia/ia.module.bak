@@ -1,0 +1,746 @@
+<?php
+// $Id$
+
+define('IA_REGISTER_URL', 'http://www.archive.org/account/login.createaccount.php');
+define('IA_DETAILS_URL', 'http://www.archive.org/details-db.php');
+define('IA_DOWNLOAD_URL', 'http://www.archive.org/download/');
+define('IA_IDENTIFIER_CHECK_URL', 'http://www.archive.org/services/check_identifier.php');
+define('IA_SUBMIT_URL', 'http://www.archive.org/services/contrib-submit.php');
+define('IA_USER_CHECK', 'http://www-parker.archive.org/services/user-check.php');
+define('IA_OAI_URL', 'http://www.archive.org/services/oai2.php');
+define('IA_STATUS_URL', 'http://www.archive.org/services/item-status.php');
+define('IA_OAI_METADATA_PREFIX', 'oai_dc');
+
+function ia_info($field) {
+  $info['name'] = 'Internet Archive';
+  $info['protocol'] = 'FTP';
+  
+  return $info[$field];
+}
+
+/**
+ * hook_help
+ */
+function ia_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Allows integration with the Internet Archive (archive.org)');
+    case 'user/help#ia':
+      return t('This allows you to log into %this-site using your <a href="http://www.archive.org/">Internet Archive</a> contributor account (FTP) username and password.', array('%this-site' => variable_get('site_name', t('this site'))));
+  }
+}
+
+function ia_perm() {
+  return array('administer ia');
+}
+
+/**
+ * Implements hook_user
+ */
+function ia_user($op, &$edit, &$user, $category = NULL) {
+  switch ($op) {
+    case 'form':
+      if ($category == 'account') {
+        $output[] = array('title' => 'Internet Archive',
+                          'data'  => form_password(t('Your archive.org account password'), 'ia_pass', $user->ia_pass, 64, 64, t('This password will be used to automatically publish your media on archive.org')));
+      }
+      break;
+    case 'validate':
+      $email = ($edit['mail']) ? $edit['mail'] : $user->mail;
+        $ia_pass = ($edit['ia_pass']) ? $edit['ia_pass'] : $user->ia_pass;
+      if (function_exists('ftp_connect')) {
+        $conn = @ ftp_connect(_ia_upload_server());
+        if ($conn) {
+          ob_start(); // having troubles keeping messages suppressed
+          $result = @ftp_login($conn, $email, $ia_pass);
+          ob_end_clean();
+        }
+        ftp_quit($conn);
+        if (!$result) {
+          drupal_set_message(t("New users on Ourmedia must also register at <a href=\"http://www.archive.org\">archive.org</a> with the same e-mail address. Once you do that, you'll be allowed to upload media."), 'error');
+        }
+      }
+      break;
+    case 'login':
+      $result = db_result(db_query('SELECT module FROM {authmap} WHERE uid=%d', $user->uid));
+      if ($result == 'ia' && !$user->ia_pass) {
+        user_save($user, array('mail' => $edit['name'], 'ia_pass' => $edit['pass']));
+      }
+      break;
+  }
+
+  return $output;
+}
+
+/**
+ * implement hook_settings
+ */
+function ia_settings() {
+  $output = '';
+  $output.= form_textfield(t('Collection'), 'ia_collection', variable_get('ia_collection', ''), 64, 64, t('The collection to which uploads from this site belong.'));
+  return $output;
+}
+
+function ia_menu($may_cache) {
+  $items = array();
+  
+  if ($may_cache) {
+    $items[] = array('path' => 'ia/details', 'title' => '',
+                     'callback' => 'ia_details',
+                     'type' => MENU_CALLBACK,
+                     'access' => user_access('access content'));
+    $items[] = array('path' => 'admin/ia', 'title' => t('ia status'),
+                     'callback' => 'ia_admin',
+                     'access' => user_access('administer ia'));
+  }
+
+  return $items;
+}
+
+function ia_nodeapi(&$node, $op, $teaser = NULL, $page = NULL) {
+  global $user;
+  
+  switch ($op) {
+    case 'load':
+      $ia_object = db_fetch_object(db_query('SELECT * FROM {ia} WHERE nid=%d AND status=1', $node->nid));
+
+      if ($ia_object) {
+        if ($ia_object->status == 1) {
+          return array('ia_identifier' => $ia_object->ia_identifier);
+        }
+        else {
+          if ($ia_object->ia_identifier) {
+            return ia_check_status($ia_object->ia_identifier);
+          }
+        }
+      }
+      break;
+    case 'insert':
+      if (substr($node->type,-5) == 'media' && !$node->ia_identifier) {
+        if (!ia_submission($node)) {
+          watchdog('error', t('Upload to archive.org failed'));
+        }
+      }
+      break;
+    case 'delete':
+      db_query('DELETE FROM {ia} WHERE nid = %d', $node->nid);
+      break;
+    case 'validate':
+      if (substr($node->type,-5) == 'media') {
+        if (!ia_user_check($user->mail)) {
+          form_set_error('mail', t('The account %mail does not have access to upload items to the Internet Archive. Please <a href="%url">register there</a> first.', array('%mail' => $user->mail, '%url' => IA_REGISTER_URL)));
+        }
+        else if (!$user->ia_pass) {
+          form_set_error('mail', t('You must enter your Internet Archive password before you can upload content. Please do so <a href="%url">here</a>.', array('%url' => url('user/'.$user->uid.'/edit'))));
+        }
+        if (function_exists('ftp_connect')) {
+          $conn = @ ftp_connect(_ia_upload_server());
+          if ($conn) {
+            ob_start(); // having troubles keeping messages suppressed
+            $result = @ftp_login($conn, $user->mail, $user->ia_pass);
+            ob_end_clean();
+          }
+          ftp_quit($conn);
+          if (!$result) {
+            form_set_error('mail', t("Your e-mail address and archive.org password are incorrect. You will not be allowed to upload media until you have entered valid information in your profile."));
+          }
+        }
+      }
+      break;  
+  }
+}
+
+/**
+ * Implementation of hook_auth
+ *
+ * This lets folks log into the site using their archive.org upload username
+ * and password
+ */
+function ia_auth($username, $password, $server) {
+  if (function_exists('ftp_connect')) {
+    $conn = @ ftp_connect(_ia_upload_server('audio'));
+    if ($conn) {
+      ob_start(); // having troubles keeping messages suppressed
+      $result = @ftp_login($conn, $username . '@' . $server, $password);
+      ob_end_clean();
+    }
+    ftp_quit($conn);
+    return $result;
+  }
+}
+
+/**
+ * Implementation of hook_cron.
+ *
+ * Fetch all latest IA uploads and store them locally
+ */
+function ia_cron() {
+  $last_run = variable_get('cron_ia_last', '');
+  $now = time();
+  // fetch new identifiers
+  $url = IA_OAI_URL . '?metadataPrefix=oai_dc&verb=ListRecords&set=collection:'.variable_get('ia_collection', 'ourmedia');
+  // only get new things (since last cron run)
+  if ($last_run) {
+    $url.= '&from='._ia_date($last_run - 6*3600);
+    $url.= '&until='._ia_date($now);
+  }
+
+  $result = drupal_http_request($url);
+  switch ($result->code) {
+    case 200:
+    case 302:
+      $data = _ia_oai_parse($result->data);
+      if ($data['OAI-PMH'][0]['ERROR'][0]) {
+        watchdog('error', t('IA: unable to fetch headers from OAI interface'));
+        return;
+      }
+      $records = $data['OAI-PMH'][0]['LISTRECORDS'][0]['RECORD'];
+      if (!is_array($records)) {
+        watchdog('warning', t('No new records found at archive.org'));
+        return;
+      }
+      foreach ($records as $record) {
+        $header = $record['HEADER'][0];
+        $metadata = $record['METADATA'][0];
+        $identifier = str_replace('oai:archive.org:', '', $header['IDENTIFIER'][0]['VALUE']);
+        if ($row = db_fetch_object(db_query("SELECT * FROM {ia} WHERE ia_identifier='%s'", $identifier))) {
+          if (!$row->status) {
+            db_query("UPDATE {ia} SET status=1 WHERE ia_identifier='%s'", $identifier);
+          }
+        }
+        else {
+          $contributor = $metadata['OAI_DC:DC'][0]['DC:CONTRIBUTOR'][0]['VALUE'];
+          $account = user_load(array('mail' => $contributor));
+          if ($account->uid) {
+            // fetch this record and add it to the user
+            ia_fetch($identifier);
+          }
+          else {
+            if ($contributor) {
+              // keep track of this in case a user account comes along later
+              db_query("INSERT INTO {ia} (nid, ia_identifier, contributor, status) VALUES (0, '%s','%s',1)",
+                       $identifier, $contributor);
+            }
+          }
+        }
+      }
+      variable_set('cron_ia_last', $now);
+      break;
+    default:
+      watchdog('error', t('IA: unable to list identifiers from OAI'));
+  }
+}
+
+
+/**
+ * CALLBACKS
+ */
+function ia_details($identifier = NULL) {
+  if (!$identifier) {
+    return drupal_not_found();
+  }
+  // LOOKUP identifier ... in a table?
+  $nid = db_result(db_query("SELECT nid FROM {ia} WHERE ia_identifier='%s'", $identifier));
+  if (!$nid) {
+    $nid = ia_fetch($identifier);
+  }
+
+  if ($nid) {
+    drupal_goto('node/'.$nid);
+  }
+  else {
+    return drupal_not_found();
+  }
+}
+
+function ia_admin() {
+  $result = pager_query("SELECT i.* FROM {ia} i INNER JOIN {node} n ON i.nid=n.nid  WHERE i.status=0 AND n.status=1 ORDER BY nid DESC");
+  $header = array('nid','ia_identifier', 'status', 'message', 'sub-status');
+  $rows = array();
+  while ($row = db_fetch_object($result)) {
+    $status = ia_check_status($row->ia_identifier);
+    if ($status['status'] == 'done') {
+      db_query("UPDATE {ia} SET status=1 WHERE ia_identifier='%s'", $row->ia_identifier);
+    }
+    $rows[] = array(l($row->nid, 'node/'.$row->nid),
+                    $row->ia_identifier,
+                    $status['ia_code'],
+                    $status['ia_message'],
+                    $status['status']);
+  }
+
+  $content = theme('table', $header, $rows);
+  $content.= theme('pager');
+  print theme('page', $content);
+}
+
+/**
+ * HELPER FUNCTIONS
+ */
+function ia_download_url($identifier, $filename) {
+  return IA_DOWNLOAD_URL . $identifier . '/'. $filename;
+}
+
+function ia_fetch($identifier) {
+  $meta_url = ia_download_url($identifier, $identifier . '_meta.xml');
+  $result = drupal_http_request($meta_url);
+  switch ($result->code) {
+    case '302':
+    case '200':
+      $data = _ia_oai_parse($result->data);
+      $contributor = $data['METADATA'][0]['UPLOADER'][0]['VALUE'];
+      $account = user_load(array('mail' => $contributor));
+      $mediatype = _ia_map_type(strtolower($data['METADATA'][0]['MEDIATYPE'][0]['VALUE']));
+
+      if ($account->uid) {
+        foreach ($data['METADATA'][0] as $key => $values) {
+          $key = _ia_map_key($mediatype, $key);
+          if (count($values) == 1) {
+            $node->$key = $values[0]['VALUE'];
+          }
+          else {
+            $value = array();
+            foreach ($values as $val) {
+              $value[] = $val['VALUE'];
+            }
+            $node->$key = $value;
+          }
+        }
+
+        $node->type = $mediatype .'media';
+        $node->title = $data['METADATA'][0]['TITLE'][0]['VALUE'];
+        $node->metadata_author = $data['METADATA'][0]['CREATOR'][0]['VALUE'];
+        $node->uid = $account->uid;
+        $node->created = time();
+        $node->changed = time();
+        $node->ia_identifier = $identifier;
+        /* Get the copyright object for this node */
+        if (function_exists('creativecommons_get_license_from_url')) {
+            $node->cc = creativecommons_get_license_from_url($data['METADATA'][0]['LICENSEURL'][0]['VALUE']);
+        }
+
+
+        $files_url = ia_download_url($identifier, $identifier . '_files.xml');
+        $files_result = drupal_http_request($files_url);
+        $files_data = _ia_oai_parse($files_result->data);
+        foreach ($files_data['FILES'][0]['FILE'] as $file) {
+            if ($file['ATTRIBUTES']['SOURCE'] == 'original') {
+                $filename = $file['ATTRIBUTES']['NAME'];
+                $format = $file['FORMAT'][0]['VALUE'];
+                $fid = db_next_id('{files}_fid');
+                db_query("INSERT INTO {files} (fid, nid, filename) VALUES (%d, %d, '%s')",
+                        $fid, $nid, $filename);
+                //$GLOBALS['fid_'.$mediatype] = $fid;
+                $GLOBALS['fid_media'] = $fid;
+                $mediaformat = $mediatype.'format';
+                $node->$mediaformat = $format;
+            }
+        }
+        $nid = node_save($node);
+        db_query("INSERT INTO {ia} (nid, ia_identifier, contributor, status) VALUES (%d, '%s', '%s', 1)", $nid, $identifier, $contributor);
+        return $nid;
+      }
+      break;
+    default:
+      watchdog('http', t('Unable to fetch information from archive.org for %id', array('%id' => $identifier)));
+  }
+}
+
+function ia_fetch_files(&$node, $identifier) {
+}
+
+function ia_check_status($identifier) {
+  $cache = cache_get('ia_status:'.$identifier);
+  if (!empty($cache)) {
+    return unserialize($cache->data);
+  }
+
+  $url = IA_STATUS_URL . '?identifier='.urlencode($identifier);
+  $result = drupal_http_request($url);
+  switch ($result->code) {
+    case '302':
+    case '200':
+      $data = _ia_oai_parse($result->data);
+      $output['ia_code'] = $data['RESULT'][0]['ATTRIBUTES']['CODE'];
+      $output['ia_message'] = $data['RESULT'][0]['MESSAGE'][0]['VALUE'];
+      $output['status'] = $data['RESULT'][0]['STATUS'][0]['VALUE'];
+      if ($output['ia_code'] == 'bad_request') {
+        // retry contrib-submit and check the status there
+        $mail = db_result(db_query("SELECT mail FROM {users} u INNER JOIN {node} n ON u.uid=n.uid INNER JOIN {ia} i ON i.nid=n.nid WHERE i.ia_identifier='%s'", $identifier));
+        $url = IA_SUBMIT_URL . '?dir='.$identifier.'&user_email='.$mail.'&server='._ia_upload_server();
+        $result = drupal_http_request($url);
+        $data = _ia_oai_parse($result->data);
+        $output['ia_code'] = $data['RESULT'][0]['ATTRIBUTES']['CODE'];
+        $output['ia_message'] = $data['RESULT'][0]['MESSAGE'][0]['VALUE'];
+      }
+      
+      // cache it for 30 minutes
+      cache_set("ia_status:".$identifier, serialize($output), time() + 1800);
+      return $output;
+  }
+  return FALSE;
+}
+
+function _ia_file_url($identifier) {
+  $meta_url = ia_download_url($identifier, $identifier . '_files.xml');
+  $result = drupal_http_request($meta_url);
+  switch ($result->code) {
+    case '302':
+    case '200':
+      $data = _ia_oai_parse($result->data);
+      return IA_DOWNLOAD_URL . $identifier . '/' . $data['FILES'][0]['FILE'][0]['ATTRIBUTES']['NAME'];
+  }
+}
+
+/**
+ * Submits files to archive.org
+ */
+function ia_submission($node) {
+  global $user;
+
+  $result = db_query("SELECT * FROM {files} WHERE nid=%d", $node->nid);
+  $files = array();
+  while ($file = db_fetch_object($result)) {
+    $files[] = $file;
+  }
+
+  if (count($files) == 0 ) {
+    return false;
+  }
+  
+  set_time_limit(600);
+
+  $identifier = ia_get_identifier($node);
+  if (!$identifier) {
+    return false;
+  }
+
+  $mediatype = str_replace('media', '', $node->type);
+  
+  if (function_exists('metadata_get_fields')) {
+    $data = metadata_get_fields($node);
+    foreach($data as $name => $field) {
+      $name = str_replace('metadata_', '', $name);
+      $metadata[$name] = $field['value'];
+    }
+  }
+
+  $metadata['collection'] = variable_get('ia_collection', '');
+  $metadata['title'] = $node->title;
+  $metadata['mediatype'] = $mediatype;
+  $metadata['uploader'] = $user->mail;
+  $metadata_xml = _ia_metadata_xml($metadata);
+
+  if (!$metadata_xml) {
+    return false;
+  }
+
+  if (count($files) == 0) {
+    return false;
+  }
+
+  $files_xml = _ia_files_xml($files);
+
+  $server = _ia_upload_server($mediatype);
+  $conn = ftp_connect($server);
+  $result = ftp_login($conn, $user->mail, $user->ia_pass);
+
+  if (!$conn || !$result) {
+    watchdog('error', t('failed to upload to %server for %mail', array('%server' => $server, '%mail' => $user->mail)));
+    return false;
+  }
+
+  ftp_mkdir($conn, $identifier);
+  ftp_chdir($conn, $identifier);
+
+  // put the metadata xml
+  // *sigh* why doesn't PHP have something equivalent to python's storlines?
+  $tmpfname = tempnam(file_create_path(variable_get('file_directory_temp','')),'ia');
+  $fp = fopen($tmpfname, 'w');
+  fwrite($fp, $metadata_xml);
+  fclose($fp);  
+  $ret = ftp_put($conn, $identifier.'_meta.xml', $tmpfname, FTP_ASCII);
+  @unlink($tmpfname);
+  if (!$ret) {
+    watchdog('error', t('failed to store %file', array('%file' => $identifier . '_meta.xml' )));
+    return false;    
+  }
+  
+  // stor the _files.xml as well
+  $tmpfname = tempnam(file_create_path(variable_get('file_directory_temp','')),'ia');
+  $fp = fopen($tmpfname, 'w');
+  fwrite($fp, $files_xml);
+  fclose($fp);  
+  $ret = ftp_put($conn, $identifier.'_files.xml', $tmpfname, FTP_ASCII);
+  @unlink($tmpfname);
+  if (!$ret) {
+    watchdog('error', t('failed to store %file', array('%file' => $identifier . '_files.xml' )));
+    return false;    
+  }
+
+  // files upload
+  foreach ($files as $file) {
+    $ret = ftp_put($conn, $file->filename, file_create_path($file->filepath), FTP_BINARY);
+    if (!$ret) {
+      watchdog('error', t('failed to store %file', array('%file' => $file->filename )));
+      return false;    
+    }
+  }
+  
+  ftp_close($conn);
+
+  $importurl = 'http://www.archive.org/services/contrib-submit.php?server='.$server.'&user_email='.urlencode($user->mail).'&dir='.$identifier;
+  $result = drupal_http_request($importurl);
+
+  // keep track of the identifier
+  db_query("INSERT INTO {ia} (nid, ia_identifier, status) VALUES (%d, '%s', 0)", $node->nid, $identifier);
+  
+  return true;
+}
+
+function ia_get_identifier($node) {
+  if ($node->ia_identifier) {
+    return $node->ia_identifier;
+  }
+
+  $identifier = str_replace(' ', '_', $node->title);
+  $identifier = preg_replace('/[^A-Za-z0-9._]/','', $identifier);
+  $orig = $identifier;
+  for ($i = 1; $i < 10; $i++) {
+    $result = drupal_http_request(IA_IDENTIFIER_CHECK_URL . '?identifier='.$identifier);
+    $response = _ia_oai_parse($result->data);
+    if ($response['RESULT'][0]['ATTRIBUTES']['TYPE'] == 'success' &&
+        $response['RESULT'][0]['ATTRIBUTES']['CODE'] == 'available') {
+      return $identifier;
+    }
+    else {
+      $identifier = $orig . '_' . $i;
+    }
+  }
+}
+
+/**
+ * OAI INTERFACE FUNCTIONS
+ */
+
+/**
+ * create a link to the details view
+ */
+function _ia_details_url($type, $identifier) {
+  if (substr($identifier, 0, 16) == 'oai:archive.org:') {
+    $identifier = substr($identifier, 16);
+  }
+  return IA_DETAILS_URL . '?mediatype='.urlencode($type).'&identifier='.$identifier;
+}
+
+/**
+ * verify that an email account is valid on archive.org
+ */
+function ia_user_check($mail) {
+  $result = drupal_http_request(IA_USER_CHECK . '?user_email='.urlencode($mail));
+  if ($result->code == 200 || $result->code == 302) {
+    $data = _ia_oai_parse($result->data);
+    if ($data['RESULT'][0]['ATTRIBUTES']['TYPE'] == 'success' &&
+        $data['RESULT'][0]['ATTRIBUTES']['CODE'] == 'found') {
+      // make sure that we've got permissions on the collection
+      foreach ($data['RESULT'][0]['USER'][0]['COLLECTIONS'][0]['COLLECTION'] as $collection) {
+        if (($collection['VALUE'] == variable_get('ia_collection','ourmedia') || $collection['VALUE'] == 'ALL') && $collection['ATTRIBUTES']['ADD_PRIV'] == 'yes') {
+          return true;
+        }
+      }
+      watchdog('error', t('Account %mail does not have add privileges to archive.org collection: %coll', array('%mail' => $mail, '%coll' => variable_get('ia_collection', 'ourmedia'))));
+    }
+  }
+  watchdog('error', t('Unable to verify archive.org account: %mail', array('%mail' => $mail)));
+  return false;
+}
+
+function _ia_upload_server() {
+  return 'items-uploads.archive.org';
+}
+
+function _ia_map_type($mediatype) {
+  switch (strtolower($mediatype)) {
+    case 'movies':
+    case 'movingimage':
+    case 'video':
+      return 'video';
+    case 'sound':
+    case 'audio':
+      return 'audio';
+    case 'text':
+      return 'text';
+    case 'image':
+      return 'image';
+  }
+  return false;
+}
+
+function _ia_map_key($mediatype, $key) {
+  switch ($mediatype) {
+    case 'audio':
+      switch ($key) {
+        case 'photo_credit':
+        case 'file_size':
+        case 'length':
+        case 'recording_mode':
+          return $key;
+        case 'sample_rate':
+          return 'sampling_rate';
+      }
+      break;
+    case 'image':
+      switch ($key) {
+        case 'photo_gps':
+          return 'image_gps_coordinates';
+        case 'film_type':
+          return 'image_film_type';
+        case 'bit_depth':
+          return 'image_bit_depth';
+        case 'genre':
+          return 'image_school';
+        case 'medium':
+          return 'image_medium';
+        case 'camera_aperture':
+        case 'camera_shutter_speed':
+        case 'camera_iso_equivalent':
+        case 'camera_focal_length':
+        case 'camera_model':
+        case 'file_size':
+        case 'image_resolution':
+          return $key;
+      }
+      break;
+    case 'text':
+      switch ($key) {
+        case 'photo_credit':
+        case 'file_size':
+          return $key;
+      }
+      break;
+    case 'video':
+      switch ($key) {
+        case 'quicktime_controller':
+        case 'quicktime_loop':
+        case 'quicktime_autoplay':
+        case 'photo_credit':
+        case 'file_size':
+        case 'length':
+        case 'framerate':
+          return $key;
+      }
+      break;
+  } 
+  $key = 'metadata_'.strtolower($key);
+  return $key;
+}
+
+
+function _ia_metadata_xml($metadata) {
+  $required = array('collection', 'title', 'mediatype');
+  foreach ($required as $key) {
+    if (!array_key_exists($key, $metadata)) {
+      return false;
+    }
+  }
+  
+  $output = '<?xml version="1.0" encoding="UTF-8" ?>';
+  $output.= "\n<metadata>\n";
+  foreach ($metadata as $key => $val) {
+    $output.= "<$key>". htmlspecialchars($val, ENT_NOQUOTES)."</$key>\n";
+  }
+  $output.= "</metadata>\n";
+  return $output;
+}
+
+function _ia_files_xml($files) {  
+  $output = '<?xml version="1.0" encoding="UTF-8" ?>';
+  $output.= "\n<files>\n";
+  foreach ($files as $file) {
+    list($major, $minor) = explode('/', $file->filemime);
+    $hash = md5(file_get_contents(file_create_path($file->filepath)));
+    
+    $output.= '<file name="'. $file->filename .'" source="original">';
+    $output.= '<format>'. $minor ."</format>\n";
+    $output.= '<md5>'. $hash . "</md5>\n";
+    $output.= "</file>\n";
+  }
+  $output.= "</files>\n";
+  return $output;
+
+}
+
+function _ia_date($time) {
+  return date('Y-m-d\TH:i:s\Z', $time);
+}
+
+function _ia_oai_parse($data) {
+  $parser = xml_parser_create('ISO-8859-1');
+  xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
+  xml_parse_into_struct($parser, $data, $values, $index);
+  xml_parser_free($parser);
+
+  $i = -1;
+  return _ia_oai_getchildren($values, $i);
+}
+
+// internal function: build a node of the tree
+function _ia_oai_buildtag($thisvals, $vals, &$i, $type) {
+  
+  if (isset($thisvals['attributes']))
+    $tag['ATTRIBUTES'] = $thisvals['attributes'];
+  
+  // complete tag, just return it for storage in array
+  if ($type === 'complete')
+    $tag['VALUE'] = $thisvals['value'];
+  
+  // open tag, recurse
+  else
+    $tag = array_merge($tag, _ia_oai_getchildren($vals, $i));
+  
+  return $tag;
+}
+
+// internal function: build an nested array representing children
+function _ia_oai_getchildren($vals, &$i) {
+  $children = array();     // Contains node data
+  
+  // Node has CDATA before it's children
+  if ($i > -1 && isset($vals[$i]['value']))
+    $children['VALUE'] = $vals[$i]['value'];
+  
+  // Loop through children, until hit close tag or run out of tags
+  while (++$i < count($vals)) {
+    
+    $type = $vals[$i]['type'];
+    
+    // 'cdata':    Node has CDATA after one of it's children
+    //         (Add to cdata found before in this case)
+    if ($type === 'cdata')
+      $children['VALUE'] .= $vals[$i]['value'];
+    
+    // 'complete':    At end of current branch
+    // 'open':    Node has children, recurse
+    elseif ($type === 'complete' || $type === 'open') {
+      $tag = _ia_oai_buildtag($vals[$i], $vals, $i, $type);
+      if ($index_numeric) {
+        $tag['TAG'] = $vals[$i]['tag'];
+        $children[] = $tag;
+      } else
+        $children[$vals[$i]['tag']][] = $tag;
+            }
+    
+    // 'close:    End of node, return collected data
+    //        Do not increment $i or nodes disappear!
+    elseif ($type === 'close')
+        break;
+  }
+  if ($collapse_dups)
+    foreach($children as $key => $value)
+        if (is_array($value) && (count($value) == 1))
+          $children[$key] = $value[0];
+  return $children;
+}
+
+                            
+?>

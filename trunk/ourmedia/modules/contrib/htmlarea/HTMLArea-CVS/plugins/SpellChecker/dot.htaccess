@@ -1,0 +1,4 @@
+Options  +execCGI
+
+AddHandler cgi-script  cgi
+Order deny,allow

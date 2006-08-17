@@ -1,0 +1,22 @@
+<?php
+function weblink_install() {
+  $query = "
+CREATE TABLE {weblink} (
+  nid int(10) unsigned default '0',
+  weblink varchar(128) default NULL,
+  click int(10) unsigned default '0',
+  monitor int(1) NOT NULL DEFAULT '0' ,
+  size text NOT NULL DEFAULT '' ,
+  change_stamp int(11) NOT NULL DEFAULT '0' ,
+  checked int(11) NOT NULL DEFAULT '0' ,
+  feed varchar(255) NOT NULL DEFAULT '' ,
+  refresh int(11) NOT NULL DEFAULT '0' ,
+  threshold int(11) NOT NULL DEFAULT '0' ,
+  spider_site int(1) NOT NULL DEFAULT '0' ,
+  spider_url varchar(255) NOT NULL DEFAULT ''
+)"; 
+ db_query($query);
+ db_query("ALTER TABLE {weblink} ADD INDEX (nid)");
+ db_query("ALTER TABLE {weblink} ADD INDEX url (weblink)");
+}
+?>

@@ -1,0 +1,260 @@
+<?php
+
+include_once ('metadata_helper.inc');
+
+function metadata_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Enables users to add various metadata to all the node types.');
+  }
+}
+
+function metadata_perm() {
+  return array('configure metadata');
+}
+
+function metadata_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array(
+      'path' => 'admin/metadata', 'title' => t('configure metadata'),
+      'callback' => 'metadata_admin',
+      'access' => user_access('configure metadata'),
+      'type' => MENU_NORMAL_ITEM
+    );
+  }
+  
+  return $items;
+}
+
+function metadata_admin() {
+    // TODO: implement this
+}
+
+function metadata_nodeapi(&$node, $op, $arg) {
+  switch ($op) {
+    case 'validate':
+      $node->metadata = metadata_load($node);
+      metadata_validate($node);
+      break;
+    case 'form post':
+      //$output = metadata_form($node);
+	    break;
+    case 'load':
+      $output['metadata'] = metadata_load($node);
+      break;
+    case 'view':
+      //$node->body .= metadata_view($node);
+      break;
+    case 'insert':
+    case 'update':
+      metadata_save($node);
+      break;
+    case 'delete':
+      metadata_delete($node);
+      break;
+  }
+
+  return $output;
+}
+
+function metadata_validate($edit) {
+  $text_elements = array_merge(get_text_fields(), get_textarea_fields());
+  foreach($text_elements as $field) {
+    if($field['required']) {
+      if(isset($edit->$field['name'])) {
+        if(empty($edit->$field['name'])) {
+          form_set_error($field['name'], t('The field %field_title is a required field', array('%field_title' => "<em>" . $field['title'] ."</em>")));
+        }
+	/* special hack for Description field. IA requires this field to be at least 5 words long */
+	if ($field['name'] == 'metadata_description') {
+	  $word_count = str_word_count($edit->$field['name']);
+	  if ($word_count < 5) {
+	    form_set_error($field['name'], t('Description should be at least 5 words long', array('%field_title' => "<em>" . $field['title'] ."</em>")));
+          }
+	}
+      }
+    }
+  }
+  
+  foreach(get_date_fields() as $field) {
+    $month_field = $field['name'] . 'month';
+    $day_field = $field['name'] . 'day';
+    $year_field = $field['name'] . 'year';
+    if (isset($edit->$month_field)) {
+      if (! checkdate($edit->$month_field, $edit->$day_field, $edit->$year_field)) {
+        form_set_error($field['name'], t('The specified date is not a valid date.'));
+      }
+    }
+  }
+}
+
+function metadata_view($node) {
+  $text_elements = array_merge(get_text_fields(), get_textarea_fields());
+  foreach($text_elements as $field) {
+    $output .= metadata_text_view($node, $field);
+	}
+	foreach(get_date_fields() as $field) {
+    $output .= metadata_date_view($node, $field);
+	}
+	foreach(get_checkbox_fields() as $field) {
+    $output .= metadata_checkbox_view($node, $field);
+	}
+	return $output;
+}
+
+function metadata_get_fields($node) {
+  $metadata = array();
+  $text_elements = array_merge(get_text_fields(), get_textarea_fields());
+  foreach($text_elements as $field) {
+    $value = metadata_get_text_fields($node, $field);
+    if ($value) {
+      $metadata[$field['name']] = $value;
+    }
+	}
+	foreach(get_date_fields() as $field) {
+    $value = metadata_get_date_fields($node, $field);
+    if ($value) {
+      $metadata[$field['name']] = $value;
+    }
+	}
+	foreach(get_checkbox_fields() as $field) {
+    $value = metadata_get_checkbox_fields($node, $field);
+    if ($value) {
+      $metadata[$field['name']] = $value;
+    }
+	}
+	return $metadata;
+}
+
+function metadata_save($node) {
+  $text_elements = array_merge(get_text_fields(), get_textarea_fields(), get_checkbox_fields());
+  foreach($text_elements as $field) {
+    metadata_text_save($node, $field['name']);
+  }
+  foreach(get_date_fields() as $field) {
+    metadata_date_save($node, $field['name']);
+  }
+}
+
+function metadata_delete($node) {
+  $all_elements = array_merge(get_text_fields(), get_textarea_fields(), get_checkbox_fields(), get_date_fields());
+  foreach($all_elements as $field) {
+    metadata_field_delete($node, $field['name']);
+  }
+}
+
+function metadata_form($node) {
+  $output = array();
+  foreach(get_text_fields() as $field) {
+    $output[$field['name']] = metadata_text_form($node, $field);
+  }
+  
+  foreach(get_textarea_fields() as $field) {
+    $output[$field['name']] = metadata_textarea_form($node, $field);
+  }
+  
+  foreach(get_date_fields() as $field) {
+    $output[$field['name']] = metadata_date_form($node, $field);
+  }
+  
+  foreach(get_checkbox_fields() as $field) {
+    $output[$field['name']] = metadata_checkbox_form($node, $field);
+  }
+	return $output;
+}
+
+function metadata_load($node) {
+  $returns = array();
+  $all_elements = array_merge(get_text_fields(), get_textarea_fields(), get_checkbox_fields(), get_date_fields());
+
+  foreach($all_elements as $field) {
+    $function_return = metadata_field_load($node, $field['name']);
+    if($function_return) {
+        $returns[$field['name']] = $function_return;
+    }
+  }
+  return $returns;
+}
+
+// Arrays for the metadata text fields
+function get_text_fields() {
+  static $metadata_text_fields;
+  if (!isset($metadata_text_fields)) {
+    $metadata_text_fields = array(
+      'author' => array('name' => 'metadata_author', 'title'=>'Author/Artist', 'helptext' => 'Individuals or companies responsible for generating the work.', 'required' => TRUE),
+      'copyrightholder' => array('name' => 'metadata_copyright_holder', 'title'=>'Copyright holder', 'helptext' => 'Individual or organization that owns the copyright to the work.', 'required' => FALSE),
+      'copyrightstatement' => array('name' => 'metadata_copyright_statement', 'title'=>'Copyright statement (if any)', 'helptext' => 'If you want a specific statement, enter it here.', 'required' => FALSE),
+      'postedby' => array('name' => 'metadata_posted_by', 'title'=>'Posted by', 'helptext' => 'If you are not the work\'s creator, enter your name here.', 'required' =>FALSE),
+      'workfirstappeared' => array('name' => 'metadata_first_appeared', 'title'=>'Where the work first appeared', 'helptext' => 'Website or the location where the work originally appeared.', 'required' => FALSE),
+      'location' => array('name' => 'metadata_location', 'title'=>'Location or settings', 'helptext' => 'Location where the work was created, cities or regions portrayed or discussed, etc.', 'required' => FALSE),
+      'peopledepicted' => array('name' => 'metadata_people_depicted', 'title'=>'People in the work', 'helptext' => 'Describe the people in the work: fictional characters, true-life figures, etc.', 'required' => FALSE),
+      'othercopyrightholders' => array('name' => 'metadata_other_copyright_holders', 'title'=>'Other copyright holders', 'helptext' => 'If this work borrows from copyrighted material, please cite and link to the original.', 'required' => FALSE),
+      'purchaseinformation' => array('name' => 'metadata_purchase_info', 'title'=>'Purchase Information', 'helptext' => 'Describe how this work can be purchased.', 'required' => FALSE),
+      'siteformoreinfo' => array('name' => 'metadata_more_info', 'title'=>'Site for more information', 'helptext' => 'Is there a website where people can find more detail about the artist or the work?', 'required' => FALSE),
+      'otherpurpose' => array('name' => 'metadata_other_purpose', 'title' => 'Intended Purpose', 'helptext' => 'If none of the listed purpose adequately identifies your work,<br/>provide a more appropriate purpose.', 'required' => FALSE),
+      'equipmentused' => array('name' => 'metadata_equipment_used', 'title' => 'Equipment, software used to create work', 'helptext' => 'List tools or software used to create the work.', 'required' => FALSE),
+      'originalvideoformat' => array('name' => 'metadata_original_format', 'title' => 'Shot in what video format?', 'helptext' => 'What is the original format of this video? (Super8, MiniDV, etc.)', 'required' => FALSE),
+      'othergenre' => array('name' => 'metadata_othergenre', 'title' => 'Add your suggested genre', 'helptext' => 'If none of the listed genres adequately identifies your work, provide a more accurate category.', 'required' => FALSE),
+      'officialrating' => array('name' => 'metadata_rating', 'title' => 'Official rating', 'helptext' => 'Rating, if any', 'required' => FALSE),
+      'identifier' => array('name' => 'metadata_unique_identifier', 'title' => 'Identifier', 'helptext' => 'Is there a unique identifier (eg: ISBN) assigned to this work?', 'required' => FALSE),
+      'producer' => array('name' => 'metadata_producer', 'title' => 'Producer', 'helptext' => 'Provide producer credits here.', 'required' => FALSE),
+      'productioncompany' => array('name' => 'metadata_production_company', 'title' => 'Production Company', 'helptext' => 'Production company used to create this work, if any.', 'required' => FALSE),
+      'distributor' => array('name' => 'metadata_distributor', 'title' => 'Distributed by', 'helptext' => '', 'required' => FALSE),
+      'fullversionurl' => array('name' => 'metadata_full_version_url', 'title' => 'If this is a trailer, where is the full work?', 'helptext' => '', 'required' => FALSE),
+      'otherversions' => array('name' => 'metadata_other_versions', 'title' => 'Other versions of this work', 'helptext' => 'Are other versions of this work available?', 'required' => FALSE),
+      'transcript' => array('name' => 'metadata_transcript', 'title' => 'Transcript', 'helptext' => 'URL where full or partial transcript of the work can be found.', 'required' => FALSE),
+      'sponsor' => array('name' => 'metadata_sponsor', 'title' => 'Sponsor, client or underwriter', 'helptext' => 'If this work was commissioned, specify who funded this endeavor.', 'required' => FALSE),
+      'album' => array('name' => 'metadata_album', 'title' => 'Album', 'helptext' => 'Is this from a particular album?', 'required' => FALSE),
+      'recordlabel' => array('name' => 'metadata_record_label', 'title' => 'Record Label', 'helptext' => 'Record label', 'required' => FALSE),
+      'publisher' => array('name' => 'metadata_publisher', 'title' => 'Publisher', 'helptext' => 'Who is your publisher? (eg: O\'Reilly, Wiley)', 'required' => FALSE),
+      'publisher_url' => array('name' => 'metadata_publisher_url', 'title' => 'Publisher URL', 'helptext' => 'Website for this publisher', 'required' => FALSE),
+      'other_type' => array('name' => 'metadata_other_type', 'title' => 'If other, tell us the type', 'helptext' => '', 'required' => FALSE)
+    );
+  }
+  return $metadata_text_fields;
+}
+
+// Arrays for the metadata textarea fields
+function get_textarea_fields() {
+  static $metadata_textarea_fields;
+  if (!isset($metadata_textarea_fields)) {
+    $metadata_textarea_fields = array(
+      'description' => array('name' => 'metadata_description', 'title' => 'Description of work', 'helptext' => 'Give a description of your work to help users in searching and browsing. <br/> Describe the topics covered in the work.', 'required' => TRUE),
+      'reviews' => array('name' => 'metadata_reviews', 'title' => 'Reviews, commentaries, awards', 'helptext' => 'Awards, festivals, articles that mentioned this work', 'required' => FALSE),
+      'syndication' => array('name' => 'metadata_syndication', 'title' => 'Syndication', 'helptext' => 'Syndication history (has work appeared previously? when, where?)', 'required' => FALSE),
+      'notes' => array('name' => 'metadata_notes', 'title' => 'Additional notes', 'helptext' => 'Place any additional information here that will help detail your work.', 'required' => FALSE),
+      'credits' => array('name' => 'metadata_credits', 'title' => 'Credits/Crew', 'helptext' => 'People involved in creating this media, with their roles', 'required' => FALSE),
+      'bio' => array('name' => 'metadata_bio', 'title' => 'Artist Bio', 'helptext' => 'Enter a brief bio of the artist here', 'required' => FALSE)
+    );
+  }
+  return $metadata_textarea_fields;
+}
+
+// Arrays for the metadata date fields
+function get_date_fields() {
+  static $metadata_date_fields;
+  if (!isset($metadata_date_fields)) {
+    $metadata_date_fields = array(
+      'creationdate' => array('name' => 'metadata_date_created', 'title'=>'Date or year created', 'helptext' => ''),
+      'releasedate' => array('name' => 'metadata_releasedate', 'title'=>'Date the work was first released', 'helptext' => 'Date the work was first broadcast or webcast'),
+      'first_publication_date' => array('name' => 'metadata_first_published', 'title'=>'Date the work was first published', 'helptext' => '')
+    );
+  }
+  return $metadata_date_fields;
+}
+
+function get_checkbox_fields() {
+  static $metadata_checkbox_fields;
+  if (!isset($metadata_checkbox_fields)) {
+    $metadata_checkbox_fields = array(
+      'maturecontent' => array('name' => 'metadata_mature_content', 'title'=>'Mature Content?', 'helptext' => 'Does this work contain mature content?'),
+      'istrailer' => array('name' => 'metadata_is_clip', 'title'=>'This is a clip/trailer', 'helptext' => 'Is this a snippet of a larger work?'),
+      'monochromatic' => array('name' => 'metadata_monochromatic', 'title'=>'Black and White', 'helptext' => 'This work is primarily Black and White'),
+    );
+  }
+  return $metadata_checkbox_fields;
+}
+
+?>

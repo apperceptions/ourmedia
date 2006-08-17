@@ -1,0 +1,72 @@
+<?php
+// $Id: codefilter.module,v 1.3 2004/09/07 11:54:41 unconed Exp $
+
+function codefilter_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t("Provides tags for escaping large pieces of code automatically.");
+  }
+}
+
+function codefilter_filter_tips($delta, $format, $long = false) {
+  if ($long) {
+    return t('To post pieces of code, surround them with &lt;code&gt;...&lt;/code&gt; tags. For PHP code, you can use &lt;?php ... ?&gt;, which will also colour it based on syntax.');
+  }
+  else {
+    return t('You may post code using &lt;code&gt;...&lt;/code&gt; (generic) or &lt;?php ... ?&gt; (highlighted PHP) tags.');
+  }
+}
+
+function codefilter_menu() {
+  drupal_set_html_head('<style type="text/css">@import url('. module_get_path('codefilter') . '/codefilter.css);</style>');
+}
+
+function codefilter_process_php($text) {
+  // Note, pay attention to odd preg_replace-with-/e behaviour on slashes
+  $text = trim(str_replace('\"', '"', $text));
+  $text = preg_replace('@</?(br|p)\s*/?>@', '', $text);
+  $text = strtr($text, array_flip(get_html_translation_table(HTML_SPECIALCHARS)));
+  return '<div class="codeblock">'. highlight_string("<?php\n$text\n?>", 1) .'</div>';
+}
+
+function codefilter_process_code($text) {
+  $multiline = ereg("[\n\r]", $text);
+  // Note, pay attention to odd preg_replace-with-/e behaviour on slashes
+  $text = trim(str_replace('\"', '"', $text));
+  $text = preg_replace('@</?(br|p)\s*/?>@', '', $text);
+  $text = '<code>'. nl2br($text) .'</code>';
+  if ($multiline) $text = '<div class="codeblock">'. $text .'</div>';
+  return $text;
+}
+
+function codefilter_escape($text) {
+  // Note, pay attention to odd preg_replace-with-/e behaviour on slashes
+  return drupal_specialchars(str_replace('\"', '"', $text));
+}
+
+function codefilter_filter($op, $delta = 0, $format = -1, $text = '') {
+  switch ($op) {
+    case 'list':
+      return array(0 => t('Code filter'));
+
+    case 'description':
+      return t('Allows users to post code verbatim using &lt;code&gt; and &lt;?php ?&gt; tags.');
+
+    case 'prepare':
+      // Note: we use the bytes 0xFE and 0xFF to replace < > during the filtering process.
+      // These bytes are not valid in UTF-8 data and thus least likely to cause problems.
+      $text = preg_replace('@<code>(.+?)</code>@se', "'\xFEcode\xFF'. codefilter_escape('\\1') .'\xFE/code\xFF'", $text);
+      $text = preg_replace('@[\[<](\?(php)?|%)(.+?)(\?|%)[\]>]@se', "'\xFEphp\xFF'. codefilter_escape('\\3') .'\xFE/php\xFF'", $text);
+      return $text;
+
+    case "process":
+      $text = preg_replace('@\xFEcode\xFF(.+?)\xFE/code\xFF@se', "codefilter_process_code('$1')", $text);
+      $text = preg_replace('@\xFEphp\xFF(.+?)\xFE/php\xFF@se', "codefilter_process_php('$1')", $text);
+      return $text;
+
+    default:
+      return $text;
+  }
+}
+
+?>

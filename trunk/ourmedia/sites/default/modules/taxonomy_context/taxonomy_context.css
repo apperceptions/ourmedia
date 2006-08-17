@@ -1,0 +1,65 @@
+.term, .subterm {
+  background-color: transparent;
+  border: 0px solid #ccc;
+  padding: 0em;
+  margin-bottom: 0em;
+}
+.subterm {
+  padding-left: 15px;
+}
+.term .title {
+  font-weight: bold;
+  font-size: 2.2em;
+}
+.subterm .title {
+  font-weight: bold;
+  font-size: 2em;
+}
+.term .description, .subterm .description {
+  text-align: justify;
+}
+.term-image, .subterm-image {
+  float: left;
+  width: 110px;
+}
+.clearit {
+  clear: both;
+}
+.imaged {
+  margin-left: 130px; 
+}
+
+.button-list {
+  list-style-type: none;
+}
+.button {
+  width: 123px;
+  height: 23px;
+  float: left;
+}
+.button-off {
+  background-image: url(images/tab.gif);background-repeat:no-repeat;
+}
+.button-off:hover {
+  background-image: url(images/tab_on.gif);
+}
+.button-on {
+  background-image: url(images/tab_on.gif);background-repeat:no-repeat;
+}
+.button a, .button a:visited, .button a:hover, .button a:link, .button a:active {
+  display: block;
+  color: #fff;
+  text-decoration: none;
+  text-align: center;
+  font-family: tahoma, verdana, arial, helvetica, sans-serif;
+  font-weight: bold;
+  vertical-align: top;
+  padding-top: 1px;
+  font-size: 1.1em;
+}
+.button a:hover {
+  background-image: url(images/tab_on.gif);background-repeat:no-repeat;
+}
+.imaged {
+  margin-left: 130px; 
+}

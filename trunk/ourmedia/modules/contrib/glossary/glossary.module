@@ -1,0 +1,479 @@
+<?php
+// $Id: glossary.module,v 1.82.2.4 2004/12/28 22:10:52 goba Exp $
+
+function glossary_help($section = "admin/help#glossary") {
+  $output = '';
+
+  switch ($section) {
+    case 'admin/help#glossary':
+      return t('<p>Glossary helps newbies understand the jargon which always crops up when specialists talk about a topic. Doctors discuss CBC and EKG and CCs. Web developers keep talking about CSS, P2P, XSLT, etc. This is all intimidating for newbies.</p>
+      <p>The Glossary module scans posts for glossary terms (and their synonyms) in the body. If found, the glossary indicator is inserted after the term, or the term is turned into an indicator link depending on the settings. By hovering over the indicator, users may learn the definition of that term. Clicking leads the user to that term presented within the whole glossary.</p>
+      <p>Glossary terms are managed as vocabularies within the taxonomy.module. To get started with glossary, create a new vocabulary on the %taxonomy_admin page. The vocabulary need not be associated with any modules, although you can add detailed description to terms by attaching (story or other type of) nodes to them. Add a few terms to the vocabulary. The term title should be the glossary entry and the description should be its definition. You can make use of the hierarchy, synonym, and related terms features. These features impact the display of the glossary when viewed in an overview.</p>
+      <p>Next, you have to setup the input formats you want to use the glossary with. At the %input_formats page select an input format to configure. Select the Glossary filter checkbox and press Save configuration. Now select the configure filters tab and select the vocabulary and apply other settings.</p>
+      <p>You can see how a vocabulary would function as a glossary by going to the %glossaries page and selecting the vocabulary to view.</p>
+      <p>Administration of glossary requires <em>%permissions</em> permissions.</p>', 
+      array("%permissions" => join(", ", array(t("administer glossary"), t("administer taxonomy"), t("access administration pages"))), "%taxonomy_admin" => l('administer &raquo; categories', 'admin/taxonomy'), "%glossary_settings" => url('admin/filters/glossary'), "%input_formats" => l('administer &raquo; input formats', 'admin/filters'), "%glossaries" => l('glossaries', 'glossary')));
+      break;
+    case 'admin/modules#description':
+      return t('Maintain a glossary on your site.');
+      break;
+    case 'filter#long-tip':
+    case 'filter#short-tip':
+      return t('Glossary terms will be automatically marked with links to their descriptions');
+  }
+}
+
+ 
+function glossary_perm() {
+  return array("administer glossary");
+}
+
+/**
+ * hook_menu: Define menu items and page callbacks.
+ * 
+ * SUGGESTED:     glossary                         => glossary_page
+ * 
+ * This is also the place where we add a link to the CSS sheet.
+ * We need the glossary filter to be a caching filter, because it is 
+ * relatively slow. If content is cached, no calls at all are made to
+ * this module for that content. That means we can not detect when the
+ * CSS sheet is actually needed. Therefor, we simply link it in always.
+ * This should really happen always, so we do it for may_cache FALSE.
+ */
+function glossary_menu($may_cache) {
+  if ($may_cache) {
+    $items = array();
+    $items[] = array(
+      'path' => 'glossary',
+      'title' => t('glossary'),
+      'callback' => 'glossary_page',
+      'access' => user_access('access content'),
+      'type' => MENU_SUGGESTED_ITEM);
+    return $items;
+  } 
+  else {
+    drupal_set_html_head('<link type="text/css" rel="stylesheet" href="'.module_get_path('glossary').'/glossary.css" />');
+  }
+}
+
+function _glossary_filter_settings($format) {
+
+  $options[0] = t('<none>');
+  foreach (taxonomy_get_vocabularies() as $vocabulary) {
+    $options[$vocabulary->vid] = $vocabulary->name;
+  }
+  
+  $group1 = form_select(t("Select Vocabulary"), "glossary_vids_$format", variable_get("glossary_vids_$format", array()), $options, t("Select one or more vocabularies which hold all terms for your glossary. When enabled, posts will be scanned for glossary terms. An icon or a superscripted link is inserted beside each term. Hover over the icon or link to learn the meaning of that term."), 0, TRUE, TRUE);
+  $group1 .= form_select(t("Match type"), "glossary_match_$format", variable_get("glossary_match_$format", "match"), array("b" => t("word"), "lr" => t("right or left substring"), "l" => t("left substring"), "r" => t("right substring"), "s" => t("any substring")), t("Choose the match type of glossary links."));
+  $group1 .= form_select(t("Case sensitivity"), "glossary_case_$format", variable_get("glossary_case_$format", "1"), array(t("case insensitive"), t("case sensitive")), t("Match either case sensitive or not. Case sensitive matches are far not that resource intensive."));
+  $group1 .= form_select(t("Replace matches"), "glossary_replace_all_$format", variable_get("glossary_replace_all_$format", 0), array(t("only the first match"), t("all matches")), t("Whether only the first match should be replaced or all matches."));
+  $output .= form_group(t("General settings"), $group1);
+  
+  $group2 = form_select(t("Term Indicator"), "glossary_replace_$format", variable_get("glossary_replace_$format", "superscript"), array("superscript" => t("superscript"), "icon" => t("icon"), "acronym link" => t("replace with acronym link")), t("Display terms using either a superscript formatted link, an icon, or an &lt;acronym&gt; tag."));
+  $group2 .= form_textfield(t("Superscript"), "glossary_superscript_$format", variable_get("glossary_superscript_$format", "i"), 15, 255, t("If you choose %superscript above, enter the superscript text.", array("%superscript" => "<strong>". t("superscript") . "</strong>")));
+  $group2 .= form_textfield(t("Glossary Icon URL"), "glossary_icon_$format", variable_get("glossary_icon_$format", "modules/glossary/glossary.gif"), 50, 255, t("If you choose %icon above, enter the URL of the glossary icon relative to the root of your Drupal site.", array("%icon" => "<strong>". t("icon") ."</strong>")));
+  $output .= form_group(t("Indicator settings"), $group2);
+
+  $output = form_group(t("Glossary filter"), $output);
+
+  return $output;
+}
+
+function glossary_filter_tips($delta, $format, $long = false) {
+  return $long ? glossary_help('filter#long-tip') : glossary_help('filter#short-tip');
+}
+
+function glossary_filter($op, $delta = 0, $format = -1, $text = "") {
+  switch ($op) {
+    case "list":
+      return array(0 => t("Glossary filter"));
+    case "description":
+      return glossary_help('admin/modules#description');
+    case "process":
+      return _glossary_filter_process($format, $text);
+    case "settings":
+      return _glossary_filter_settings($format);
+    default:
+      return $text;
+  }
+}
+
+function glossary_taxonomy($op, $type, $object) {
+  _glossary_clear_cache(0, $object['vid']);
+}
+
+function _glossary_filter_process($format, $text) {
+  
+  if (variable_get("glossary_vids_$format", 0)) {
+
+    $text = " ". $text ." ";
+    $replace_mode = variable_get("glossary_replace_$format", "superscript");
+    $terms = _glossary_get_terms($format);
+    $vids = _glossary_get_filter_vids();
+    
+    foreach ($terms as $term) {
+      $term_title = str_replace("\\", "\\\\", drupal_specialchars($term->name .": ". strip_tags($term->description), ENT_COMPAT));
+      if ($term->nodes > 0) {
+        $linkto = "glossary/term/$term->tid";
+        $hash = NULL;
+      }
+      elseif (count($vids) > 1) {
+        $linkto = "glossary/". $term->vid;
+        $hash = "term". $term->tid;
+      }
+      else {
+        $linkto = "glossary";
+        $hash = "term". $term->tid;
+      }
+      $ins_before = $ins_after = '';
+      
+      switch ($replace_mode) {
+        case "superscript":
+          $ins_after = l(variable_get("glossary_superscript_$format", "i"), $linkto, array('title' => $term_title, 'class' => 'glossary-indicator'), NULL, $hash);
+          break;
+        case "acronym link":
+          $ins_before = '<a class="glossary-term" href="' . url($linkto, NULL, $hash) . '">';
+          $ins_before .= "<acronym title=\"$term_title\">";
+          $ins_after = '</acronym></a>';
+          break;
+        default:
+          $img = "<img src=\"". variable_get("glossary_icon_$format", "glossary.gif") ."\" />";
+          $ins_after = l($img, $linkto, array('title' => $term_title), NULL, $hash);
+          break;
+      }
+      
+      // replace term and synonyms with the desired new HTML code
+      foreach ($term->synonyms as $candidate) {
+        $text = _glossary_insertlink($format, $text, $candidate, $ins_before, $ins_after);
+      }
+    }
+  }
+  return $text;
+}
+
+/**
+* Insert glossary links to $text after every $match that is not inside a link.
+* $ins_before is prepended to the matches, $_insafter is appended to them.
+* Match type and replace mode all depend on user settings.
+*
+* TODO: improve performance with not keeping *2.5 copies* of the string in memory: 
+*         $text                 - original
+*         $newtext              - transformed
+*         $before . $this_match - for checking stuff
+*/
+function _glossary_insertlink($format, &$text, $match, $ins_before, $ins_after) {
+
+  $findfunc = (variable_get("glossary_case_$format", "1") ? "strpos" : "stripos");
+  $next = $findfunc($text, $match);
+  
+  if ($next === FALSE) { // no match at all
+    return $text;
+  }
+  else { // at least one match
+    $prevend    = 0;
+    $newtext    = '';
+    $matchlen   = strlen($match);
+    $textlen    = strlen($text);
+    $replaceall = variable_get("glossary_replace_all_$format", 0);
+    
+    while ($next && ($next <= $textlen)) {
+      
+      // get parts of the match for further investigation
+      $before     = substr($text, 0, $next);
+      $this_match = substr($text, $next, $matchlen);
+      
+      // see if we have a proper match or not
+      $open  = substr_count($before, "<");
+      $close = substr_count($before, ">");
+      $opena  = substr_count($before, "<a ");
+      $closea = substr_count($before, "</a>");
+      $openacro  = substr_count($before, "<acronym");
+      $closeacro = substr_count($before, "</acronym>");
+      $proper_match = FALSE;
+      if ($opena <= $closea && $open <= $close && $openacro <= $closeacro) { // Not in an open link
+        switch (variable_get("glossary_match_$format", "b")) {
+          case "lr": // require word break left or right
+              $proper_match = (_glossary_is_boundary($text {$next - 1}) ||
+                               _glossary_is_boundary($text {$next + $matchlen}));
+              break;
+          case "b": // require word break left and right
+              $proper_match = (_glossary_is_boundary($text {$next - 1}) &&
+                               _glossary_is_boundary($text {$next + $matchlen}));
+              break;
+          case "l":  // require word break left
+              $proper_match = _glossary_is_boundary($text {$next - 1});
+              break;
+          case "r": // require word break right
+              $proper_match = _glossary_is_boundary($text {$next + $matchlen});
+              break;
+          case "s": // match any substring
+          default:
+              $proper_match = TRUE;
+              break;
+        }
+      }
+      
+      if ($proper_match) { // found match
+        $newtext .= substr($text, $prevend, ($next - $prevend)) . $ins_before . $this_match . $ins_after;
+        if ($replaceall == 0) { 
+          return $newtext . substr($text, $next + $matchlen); 
+        }
+      }
+      else { // not applicable match
+        $newtext .= substr($text, $prevend, ($next - $prevend)) . $this_match;
+      }
+      
+      // Step further in finding the next match
+      $prevend = $next + $matchlen;
+      $next = $findfunc($text, $match, $prevend);
+    }
+    // Append remaining part
+    return $newtext . substr($text, $prevend);
+  }
+}
+
+function glossary_page() {
+  if (arg(1) == "term") {
+    $tid = intval(arg(2));
+    $term = taxonomy_get_term($tid);
+    $voc = taxonomy_get_vocabulary($term->vid);
+    $breadcrumb = array(l(t("Home"), NULL), l(t("Glossaries"), "glossary"), l($voc->name, "glossary/". $term->vid));
+    $contents = taxonomy_render_nodes(taxonomy_select_nodes(array($tid)));
+    print theme("page", $contents, $term->name, $breadcrumb);
+  } 
+  else {
+    $vid = intval(arg(1));
+    $vids = _glossary_get_filter_vids();
+    $found = false;
+    if (!$vid) {
+      if (count($vids) == 1) {
+        $vid = $vids[0];
+        $found = true;
+      }
+    }
+    else {
+      $found = array_search($vid, _glossary_get_filter_vids());
+    }
+    if (!$vid || $found === false) {
+      $breadcrumb = array(l(t("Home"), NULL));
+      print theme("page", _glossary_list(), t("Glossaries"), $breadcrumb);
+    }
+    else {
+      $voc = taxonomy_get_vocabulary($vid);
+      $breadcrumb = array(l(t("Home"), NULL));
+      if (count($vids) > 1) {
+        $breadcrumb[] = l(t("Glossaries"), "glossary");
+      }
+      print theme("page", glossary_overview($vid), t("Glossary: %vocabulary", array("%vocabulary" => $voc->name)), $breadcrumb);
+    }
+  }
+}
+
+function _glossary_alphabar($vid, &$tree) {
+  $blocks = array(range('0', '9'), range('a', 'z'));
+
+  $found_letters = array();
+  foreach ($tree as $key=>$term) {
+    if ($term->depth == 0) {
+      $firstletter = strtolower($term->name[0]);
+      if (! array_key_exists($firstletter, $found_letters)) {
+        $found_letters[$firstletter] = 1;
+        $tree[$key]->firstletter = $firstletter;
+      }
+    }
+  }
+  
+  foreach ($blocks as $block) {
+    $found = False;
+    foreach ($block as $entry) {
+      if (array_key_exists($entry, $found_letters)) {
+        $found = True;
+        break;
+      }
+    }
+    if ($found) {
+      foreach ($block as $entry) {
+        if (! array_key_exists($entry, $found_letters)) {
+          $found_letters[$entry] = 0;
+        }
+      }
+    }
+  }
+   
+
+  $output = "\n<div class=\"glossary-links\">";   
+  $letters = array_keys($found_letters);
+  sort($letters);
+  foreach ($letters as $letter) {
+    if ($found_letters[$letter]) {
+      $links[] = l($letter, 'glossary/'.$vid, NULL, NULL, 'letter' . $letter);
+    } 
+    else {
+      $links[] = $letter;
+    }
+  }
+  if (count($links)) {
+    $output .= theme_links($links);
+  }
+  $output .= "</div>\n";
+  return $output;
+}
+
+
+function glossary_overview($vid) {
+  $tree = taxonomy_get_tree($vid);
+  $output = _glossary_alphabar($vid, $tree);
+  if ($tree) {
+    foreach ($tree as $term) {
+      if (isset($term->firstletter)) {
+          $output .= "<a id=\"letter". $term->firstletter ."\"></a>\n";
+      }
+      $output .= "<a id=\"term{$term->tid}\"></a>\n". 
+                 "<dl class=\"glossary-list\" style=\"margin-left:". ($term->depth * 15) ."px;\">\n";
+      $output .= "<dt>{$term->name}";
+      if (user_access('administer taxonomy')) {
+        $output .= l(t('edit term'), "admin/taxonomy/edit/term/$term->tid", array('title' => t('edit this term and definition.'), 'class' => 'glossary-edit-term'));
+      }
+      $output .= "</dt><dd>{$term->description} \n";
+      if ($nodes = taxonomy_term_count_nodes($term->tid)) {
+        $output .= '<p>' . l(t('Detailed description'), "glossary/term/{$term->tid}") . '</p>';
+      }
+      if ($relations = taxonomy_get_related($term->tid, "name")) {
+        $output .= "<span class=\"glossary-related\">". t("See also") . ": ";
+        foreach ($relations as $related) {
+          $items[] .= l($related->name, 'glossary/'. $vid, NULL, NULL, "term". $related->tid);
+        }
+        $output .= implode(', ', $items) . "</span>\n"; // strip trailing comma
+        unset($items);
+      }
+      $output .= "</dd></dl>\n";
+    }
+  }
+  if (user_access('administer taxonomy')) {
+    $links[] = l(t('add term'), "admin/taxonomy/add/term/$vid");
+    $links[] = l(t('edit glossary'), 'admin/taxonomy');
+    $output .= theme('links', $links);
+  }
+  return $output;
+}
+
+function _glossary_list() {
+  $output = "";
+  $vids = _glossary_get_filter_vids();
+  $vocs = array();
+  foreach ($vids as $vid) {
+    $voc = taxonomy_get_vocabulary($vid);
+    $vocs[$voc->name] = $voc;
+  }
+  uksort($vocs, _glossary_cmp_strcase);
+
+  $header = array(t("Glossary"), t('Operations'));
+  $rows = array();
+  foreach ($vocs as $voc) {
+    $row = array();
+    $row[0] = $voc->name;
+    $row[1] = l(t('view'), "glossary/". $voc->vid);
+    if (user_access('administer taxonomy')) {
+      $row[1] .= " ". l(t('edit'), "admin/taxonomy");
+    }
+    $rows[] = $row;
+  }
+
+  $output = theme('table', $header, $rows);
+  return $output;
+}
+
+function glossary_help_page() {
+  print theme('page', glossary_help('admin/help#glossary'));
+}
+
+function _glossary_get_terms($format) {
+  static $terms = FALSE;
+  
+  if ($terms === FALSE) {
+    $terms = $synonyms = array();
+    $vids = variable_get("glossary_vids_$format", 0);
+    
+    foreach ($vids as $vid) {
+      $synonyms = _glossary_get_synonyms($vid);
+    
+      // Get all glossary terms and attach synonyms.
+      // omit terms without a description. those are usually container terms.
+      $result = db_query("SELECT t.name, t.description, t.tid, COUNT(tn.nid) as nodes FROM {term_data} t LEFT JOIN {term_node} tn ON t.tid = tn.tid WHERE t.vid = %d GROUP BY t.tid, t.name, t.description ORDER BY LENGTH(t.name) DESC", $vid);
+      while ($term = db_fetch_object($result)) {
+        if ($term->description) {
+          $term->synonyms = $synonyms[$term->tid];
+          $term->synonyms[] = $term->name;
+          $term->vid = $vid;
+          $terms[] = $term;
+        }
+      }
+    }
+  }
+  
+  return $terms;
+}
+
+// Get all synonyms for all glossary terms
+function _glossary_get_synonyms($vid) {
+  $result = db_query("SELECT ts.tid, ts.name FROM {term_synonym} ts, {term_data} t WHERE ts.tid = t.tid AND t.vid = %d", $vid);
+  while ($synonym = db_fetch_object($result)) {
+    $synonyms[$synonym->tid][] = $synonym->name;
+  }
+  return $synonyms;
+}
+
+// This seems to be 1.2 times faster in fine-grained testing then
+// the ereg solution used before. The chars used here are from the
+// grep info page.
+function _glossary_is_boundary($char) {
+  return (strpos("!\"#\$%&'()*+,-./:;<=>?@[\]^_`{|}~ \t\n\r", $char) !== FALSE);
+}
+
+// Natively only available in PHP 5+
+// WARNING: Eats a tremendous amount of memory!
+if (!function_exists("stripos")) {
+  function stripos($haystack, $needle, $offset = 0) {
+    return strpos(strtoupper($haystack), strtoupper($needle), $offset);
+  }
+}
+
+function glossary_trip_search_taxonomy($term) {
+  return l($term->name, "glossary", NULL, NULL, $term->tid). trip_search_teaser($term->description);
+}
+
+function _glossary_clear_cache($format, $vid) {
+  // We could throw less things away if we checked which filter formats
+  // used the glossary filter, and we only threw those away. In practice,
+  // most if not all formats would use the glossary filter, so we just 
+  // get rid of them all.
+  if ($format) {
+    cache_clear_all('filter:'.$format, true);
+  } 
+  else {
+    cache_clear_all('filter:', true);
+  }
+}
+
+function _glossary_get_filter_vids() {
+  // We can't use filter_formats() here, because we need all input formats,
+  // not just those we are allowed to post in.
+
+  $vids = array();
+  $result = db_query('SELECT format FROM {filter_formats}');
+  while ($format = db_fetch_object($result)) {
+    $filters = filter_list_format($format->format);
+    foreach ($filters as $filter) {
+      if ($filter->module == "glossary") {
+        $vids = array_merge($vids, variable_get("glossary_vids_". $format->format, array()));
+      }
+    }
+  }
+  return array_unique($vids);
+}
+
+function _glossary_cmp_strcase($a, $b) {
+  return strcmp(strtolower($a), strtolower($b));
+}
+
+?>

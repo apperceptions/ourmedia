@@ -1,0 +1,222 @@
+<?php
+$fid_media = -1;
+$fid_photo = -1;
+require_once "ourmedia.php";
+
+/**
+ * Implementation of hook_nodeapi().
+ */
+function textmedia_nodeapi($node, $op, $arg) {
+  return ourmedia_nodeapi($node, $op, 'textmedia');
+}
+
+/**
+ * Implementation of hook_help().
+ */
+function textmedia_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Enables users to publish text.');
+    case 'node/add#text':
+      return t("Publish a text and enter all other metadata information about it.");
+  }
+}
+
+/**
+ * Implementation of hook_node_name().
+ */
+function textmedia_node_name($node) {
+  return t('text');
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function textmedia_perm() {
+  return array('publish text', 'edit own text');
+}
+
+/**
+ * Implementation of hook_access().
+ */
+function textmedia_access($op, $node) {
+  global $user;
+
+  if ($op == 'create') {
+    return user_access('publish text');
+  }
+
+  if ($op == 'update' || $op == 'delete') {
+    if (user_access('edit own text') && ($user->uid == $node->uid)) {
+      return TRUE;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_link().
+ */
+function textmedia_link($type, $node = 0, $main) {
+  $links = array();
+
+  if ($type == 'node' && $node->type == 'textmedia') {
+    // Don't display a redundant edit link if they are node administrators.
+    if (textmedia_access('update', $node) && !user_access('administer nodes')) {
+      $links[] = l(t('edit this text'), "node/$node->nid/edit");
+    }
+  }
+  return $links;
+}
+
+/**
+ * Implementation of hook_menu().
+ */
+function textmedia_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'node/add/textmedia', 'title' => t('text'),
+    'access' => textmedia_access('create', NULL));
+  }
+  return $items;
+}
+
+/**
+ * Implementation of hook_validate().
+ */
+function textmedia_validate($node) {
+  return ourmedia_validate($node,'textmedia');
+}
+
+/**
+ * Specifies the valid text files
+ */
+function get_text_supported_filemime() {
+  return array(
+    'application/zip',
+    'text/plain',
+    'application/x-tar',
+    'text/rtf',
+    'application/pdf',
+    'application/msword'
+  );
+}
+
+/**
+ * Validates the text url
+ */
+function validate_text_url($node, $fileid_type) {
+  return validate_url($node, $fileid_type,'textmedia'); 
+}
+   
+/**
+ * Implementation of hook_form().
+ */
+function textmedia_form(&$node, &$param) {
+  return ourmedia_mediaform(&$node, &$param , 'textmedia');
+}
+
+/**
+ * Generates text fields values
+*/
+function get_text_field_value($node, $field) {
+  return get_ourmedia_field_value($node, $field,'textmedia'); 
+}
+
+/**
+ * Generates text specific fields
+ */
+function get_text_specific_fields($node) {
+  return get_ourmedia_field_value($node, $field,'textmedia'); 
+}
+
+/**
+ * Generates text taxonomy
+ */
+function get_text_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy') {
+  return get_ourmedia_taxonomy_node_form($node = '', $help = NULL, $name = 'taxonomy'); 
+}
+
+/**
+ * Implementation of hook_content().
+ */
+function textmedia_content($node, $main = 0) {
+  return node_prepare($node, $main);
+}
+
+/**
+ * Implementation of hook_load().
+ */
+function textmedia_load($node) {
+  global $fid_text;
+  global $fid_photo;
+  $output = array();
+
+  $result = db_query("SELECT * FROM {text} where nid = %d", $node->nid);
+  if($result) {
+    $output = db_fetch_object($result);
+    $fid_text = $output->text_fileid;
+    $fid_photo = $output->photo_fileid;
+    $output->texturl = '';
+    $output->photourl = '';
+    $texturl_result = db_query("SELECT filepath from {files} where fid = %d", $output->text_fileid);
+    if($texturl_result && db_num_rows($texturl_result) > 0) {
+      $output->texturl = file_create_url(db_result($texturl_result));
+    }
+    $photo_result = db_query("SELECT filepath from {files} where fid = %d", $output->photo_fileid);
+    if($photo_result && db_num_rows($photo_result) > 0) {
+      $output->photourl = file_create_url(db_result($photo_result));
+    }
+  }
+  
+  $returns = array('text' => $output);
+  return $returns;
+}
+
+
+/**
+ * Implementation of hook_view()
+ */
+function textmedia_view(&$node, $teaser) {
+ return ourmedia_view(&$node, $teaser,'textmedia'); 
+}
+
+/**
+ * Generates theme for the page
+ */
+function theme_text_view($node, $text_data, $text_metadata, $text_taxonomy) {
+  $output =  theme_ourmedia_view($node, $video_data, $video_metadata, $media_taxonomy,'textmedia');
+  $output = theme('box', 'Text', $output);
+  if(isset($text_metadata)) {
+    foreach($text_metadata as $text_fields) {
+      if($text_fields) {
+        $output_metadata .= "<div><b>" . $text_fields['title'] . "</b>: " . $text_fields['value'] ."</div>";
+      }
+    }
+    $output .= theme('box', 'Other Metadata', $output_metadata);
+  }
+  
+  return $output;
+}
+
+/**
+ * Implementation of hook_insert().
+ */
+function textmedia_insert($node) {
+  ourmedia_insert($node, 'textmedia');  
+}
+
+/**
+ * Implementation of hook_update().
+ */
+function textmedia_update($node) {
+  return ourmedia_update($node,'textmedia');
+}
+
+/**
+ * Implementation of hook_delete().
+ */
+function textmedia_delete($node) {
+  db_query('DELETE FROM {text} WHERE nid = %d', $node->nid);
+}
+?>

@@ -1,0 +1,163 @@
+<?php
+// $Id: members.module,v 1.36 2004/11/24 22:03:32 dries Exp $
+
+function members_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Enables users to list all members.');
+      break;
+  }
+}
+
+function members_settings() {
+  $output = form_select(t("Roles to show"), "members_roles", variable_get("members_roles", array()), user_roles(1), t("Select roles to show in the members listing."), 0, 1);
+  $output .= form_select(t("Columns to show"), "members_fields", variable_get("members_fields", _member_fields()), _member_fields(), t("Select the fields which should be displayed on your members overview page. Note that some fields require certain modules to be active."), 0, 1);
+
+  return $output;
+}
+
+function members_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'members',
+                     'title' => t("members"),
+                     'callback' => "members_page",
+                     'access' => user_access("access members list"),
+                     'type' => MENU_MODIFIABLE_BY_ADMIN );
+  }
+
+  return $items;
+}
+
+
+function members_perm() {
+  return array("access members list");
+}
+
+function members_page($rids = null) {
+
+  if (user_access("access members list")) {
+    
+    // you may specify roles using second url argument. otherwise, use admin pref
+    if ($rids) {
+      $roles = explode(',', $rids);
+    }
+    else {
+      $roles = variable_get("members_roles", array());
+    }
+
+    if ($roles) {
+
+      $fields = array();
+      $enabled_fields = variable_get("members_fields", _member_fields());
+      foreach (_member_fields() as $field => $data) {
+        if (in_array($field, $enabled_fields)) {
+          $fields[$field] = $data;
+        }
+      }
+      foreach ($fields as $field => $data) {
+        if (substr($field, 0, 8) == 'profile.') {
+          $field = 'p.value';
+        } else if ($field == 'rid') {
+          $field = '';
+        }
+        $header[] = array("data" => $data, "field" => $field);
+      }
+      
+      foreach ($roles as $rid) {
+        $list[] = "'" . db_escape_string($rid) ."'";
+      }
+      $list = implode(',', $list);
+
+      $query = "SELECT DISTINCT(u.uid) FROM {users} u INNER JOIN {users_roles} r ON u.uid=r.uid";
+      $sort = tablesort_get_order($header);
+      if ($sort['sql'] == 'p.value') {
+        $fieldid = db_result(db_query("SELECT fid FROM {profile_fields} WHERE name='%s'",substr(array_search($sort['name'], $fields), 8)));
+        $query.= " LEFT JOIN {profile_values} p ON u.uid=p.uid WHERE (p.fid = '". db_escape_string($fieldid). "' OR p.fid IS NULL) AND";
+      }
+      else {
+        $query.= " WHERE";
+      }
+      $query.= " r.rid IN ($list) AND u.status=1" . tablesort_sql($header);
+      $result = pager_query($query, 200);
+
+      $rows = array();
+      $profile_fields = array();
+      while ($userid = db_fetch_object($result)) {
+        $account = user_load(array('uid' => $userid->uid));
+        $row = array();
+        foreach ($fields as $field => $title) {
+          $data = NULL;
+          if (substr($field, 0, 8) == 'profile.') {
+            $field = substr($field, 8);
+            if (!$profile_fields[$field]) {
+              $profile_fields[$field] = db_fetch_object(db_query("SELECT * FROM {profile_fields} WHERE name='%s'", $field));
+            }
+            $data = profile_view_field($account, $profile_fields[$field]);
+          }
+          else if ($field == 'rid') {
+            $data = array();
+            foreach ($account->roles as $rid => $role) {
+              if (in_array($rid, $roles)) {
+                $data[] = l($role, 'members/'.$rid);
+              }
+            }
+            $data = implode (', ', $data);
+          }
+          else if ($field == 'picture') {
+            $data = theme("user_picture", $account);
+          }
+          else if ($field == 'changed') {
+            $data = format_interval(time() - $account->changed);
+          }
+          else {
+            $data = $account->$field;
+          }
+
+          if (stristr($field, 'name')) {
+            $data = l($data, 'user/'.$account->uid);
+          }
+          $row[] = array('data' => $data);
+        }
+        $rows[] = $row;
+      }
+      
+      if ($pager = theme("pager", NULL, 200, 0, tablesort_pager())) {
+        $rows[] = array(array("data" => $pager, "colspan" => count($header)));
+      }
+
+      $totalmembers_query = "SELECT count(DISTINCT(u.uid)) as totalmembers FROM {users} u INNER JOIN {users_roles} r ON u.uid=r.uid";
+      $result = db_fetch_object(db_query($totalmembers_query));
+      $totalmembers = $result->totalmembers;
+      $output .= "Total members: <b>" . $totalmembers . "</b><br/><br/>";
+      $output.= '<div id="members-main">'. theme("table", $header, $rows) .'</div>';
+      print theme("page", $output);
+    }
+    else {
+      print theme("page", t("Warning: there aren't any users with roles configured to be shown here."));
+    }
+  }
+}
+
+function _member_fields() {
+  $output = array();
+
+  $output['rid'] = t('Roles');
+  $output['name'] = t('Username');
+
+  // profile fields
+  if (module_exist('profile')) {
+    $result = db_query("SELECT name,title FROM {profile_fields} WHERE visibility = %d ORDER BY weight ASC", PROFILE_PUBLIC_LISTINGS);
+    while ($row = db_fetch_object($result)) {
+      $output["profile.$row->name"] = $row->title;
+    }
+  }
+
+  $output['mail'] = t('Email');
+  $output['changed'] = t('Last Seen');
+  $output['picture'] = t('Picture');
+
+  return $output;
+}
+?>
