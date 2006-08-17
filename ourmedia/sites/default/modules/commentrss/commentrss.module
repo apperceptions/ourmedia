@@ -1,0 +1,192 @@
+<?php
+
+function commentrss_help($section="admin/modules#description") {
+  if ($section == "admin/modules#description") {
+    return t('Provides RSS feeds for comments');
+  }
+}
+
+/**
+ * Implementation of hook_comment().
+ */
+
+function commentrss_comment($comment, $op)
+{
+
+  switch ($op) {
+
+case 'insert':
+case 'update':
+
+$cid = url("commentrss/user/" . $comment->uid, NULL, NULL, TRUE);
+cache_clear_all($cid);
+
+break;
+
+}
+
+}
+
+function commentrss_set_cache()
+{
+global $user, $base_url;
+
+if (!$user->uid && $_SERVER['REQUEST_METHOD'] == 'GET') {
+    // This will fail in some cases, see page_get_cache() for the explanation.
+    if ($data = ob_get_contents()) {
+      if (function_exists('gzencode')) {
+        if (version_compare(phpversion(), '4.2', '>=')) {
+          $data = gzencode($data, 9, FORCE_GZIP);
+        }
+        else {
+          $data = gzencode($data, FORCE_GZIP);
+        }
+      }
+      ob_end_flush();
+      cache_set($base_url . request_uri(), $data, CACHE_PERMANENT, drupal_get_headers());
+    }
+  } 
+
+}
+
+function commentrss_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+  $items[] = array('path' => 'commentrss/node', 'title' => t('Comment RSS Feed'),
+      'callback' => 'commentrss_feed_node',
+      'access' => user_access('access content'),
+      'type' => MENU_CALLBACK);
+  }
+  $items[] = array('path' => 'commentrss/user', 'title' => t('Comment RSS Feed'),
+      'callback' => 'commentrss_feed_user',
+      'access' => user_access('access content'),
+      'type' => MENU_CALLBACK);
+  return $items;
+}
+
+function commentrss_commentload($conditions)
+{
+  // Turn the conditions into a query.
+  foreach ($conditions as $key => $value) {
+    $cond[] = 'c.'. db_escape_string($key) ." = '". db_escape_string($value) ."'";
+  }
+
+  // Retrieve the comment.
+  $comment = db_fetch_object(db_query(db_rewrite_sql('SELECT c.* FROM {comments} c WHERE '. implode(' AND ', $cond))));
+  $comment = drupal_unpack($comment);
+
+return $comment;
+
+}
+
+// Provides a comment feed for the complete Drupal site (ie. all nodes)
+function commentrss_feed_user($uid) {
+  global $base_url, $locale;
+
+  if (!isset($uid) || empty($uid)) {
+    return;
+  }
+
+  $account = user_load(array('uid' => $uid, 'status' => 1));
+
+	if (!$account) {
+		return;
+	}
+
+  $feedname = $account->name ."'s comments";
+  $feedurl = url("user/$uid", NULL, NULL, TRUE);
+
+  $result = db_query("SELECT c.cid AS cid FROM comments c WHERE (c.uid = %d) ORDER BY c.timestamp DESC", $uid);
+
+	if (db_num_rows($result) > 0) {
+	    while ($onecomment = db_fetch_array($result)) {
+	      $comments[] = $onecomment['cid'];
+	    }
+		$items = commentrss_get_items($comments);
+	}
+
+    $channel = array(
+      'version'     => '2.0',
+      'title'       => $feedname,
+      'link'        => $feedurl,
+      'description' => 'Recently published comments from Ourmedia.org',
+      'language'      => $locale
+    );
+
+    $output = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    $output .= "<rss version=\"". $channel["version"] . "\" xml:base=\"". $base_url ."\" ". "xmlns:dc=\"http://purl.org/dc/elements/1.1/\"" .">\n";
+    $output .= format_rss_channel($channel['title'], $channel['link'], $channel['description'], $items, $channel['language']);
+    $output .= "</rss>\n";
+
+    drupal_set_header('Content-Type: text/xml; charset=utf-8');
+    print $output;
+	commentrss_set_cache();
+}
+
+// Node Comments
+function commentrss_feed_node($nid) {
+  global $base_url, $locale;
+
+  if (!isset($nid) || empty($nid)) {
+    return;
+  }
+
+  if (is_numeric($nid)) 
+	{ 
+		$node = node_load(array('nid' => $nid));
+    
+    	// No node found for this ID
+    	if (!$node) { 
+			return; 
+		}
+
+  $feedname = $node->title ."'s comments";
+  $feedurl = url("node/$node->nid", NULL, NULL, TRUE);
+
+	$result = db_query("SELECT c.cid AS cid FROM comments c WHERE (c.nid = %d) ORDER BY c.timestamp DESC", $nid);
+	
+		if (db_num_rows($result) > 0) {
+		    while ($onecomment = db_fetch_array($result)) {
+		      $comments[] = $onecomment['cid'];
+		    }
+			$items = commentrss_get_items($comments);
+		}
+	
+	    $channel = array(
+	      'version'     => '2.0',
+	      'title'       => $feedname,
+	      'link'        => $feedurl,
+	      'description' => 'Recently published comments from Ourmedia.org',
+	      'language'      => $locale
+	    );
+	
+	    $output = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+    	$output .= "<rss version=\"". $channel["version"] . "\" xml:base=\"". $base_url ."\" ". "xmlns:dc=\"http://purl.org/dc/elements/1.1/\"" .">\n";
+	    $output .= format_rss_channel($channel['title'], $channel['link'], $channel['description'], $items, $channel['language']);
+	    $output .= "</rss>\n";
+	
+	    drupal_set_header('Content-Type: text/xml; charset=utf-8');
+	    print $output;
+		commentrss_set_cache();
+
+  }
+
+}
+
+
+// Format RSS for comments sent in reply to the nodes selected by the given SQL selector
+function commentrss_get_items($comments) {
+  
+  if ($comments) {
+    foreach ($comments as $value) {
+      $comment = commentrss_commentload(array('cid' => $value));
+
+      $link = url("node/$comment->nid", NULL, NULL, 1);
+	  $extra = array('pubDate' => date('r', $node->changed),'dc:creator' => $comment->name);
+      $items .= format_rss_item($comment->subject, $link, $comment->comment, $extra);
+    }
+
+  }
+	return $items;
+}

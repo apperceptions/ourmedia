@@ -1,0 +1,222 @@
+<script language="javascript" src = "sites/staging.ourmedia.org/files/theme_editor/ourmedia-delhi/homepage.js"></script>
+
+<div id="homepage">
+<center>
+  <div id="welcome">
+
+    <img id="alphaimage" src="<?php print path_to_theme() ?>/images/nowinalpha-star.gif" /> 
+      <h2 align="left">
+        <font color="white"><?php print "$welcome_title"?></font>
+      </h2>
+      <p align="left"><b><?php print $welcome_text_para1 ?></b></p>
+      <p align="left"><b><?php print $welcome_text_para2 ?></b></p>
+	 
+  </div>
+  </center>
+	<center>
+  <div id="videosection">
+    <div id="video">
+
+      <iframe id="featuredVideo" border="0" frameborder="0" src="<?php print path_to_theme() ?>/featured_video.php?video=<?php print $featured_videos[0]['video_url'] ?>" width="350" height="287">
+      </iframe>
+    </div>
+    <div id="artist">
+      <b><?php print $featured_videos[0]['artist_name'][0] ?>: </b><?php print $featured_videos[0]['artist_name'][1] ?><br/>
+      <b><?php print $featured_videos[0]['media_title'][0] ?>: </b><?php print $featured_videos[0]['media_title'][1] ?><br/><hr />
+      <b> <?php print $featured_videos[0]['media_type'][0] ?>: </b><?php print $featured_videos[0]['media_type'][1] ?><br/>
+      <b><?php print $featured_videos[0]['field_custom1'][0] ?>: </b><?php print $featured_videos[0]['field_custom1'][1] ?><br/>
+      <b><?php print $featured_videos[0]['field_custom2'][0] ?>: </b><?php print $featured_videos[0]['field_custom2'][1] ?><br/>
+      <b><?php print $featured_videos[0]['field_custom3'][0] ?>: </b><?php print $featured_videos[0]['field_custom3'][1] ?><br/><br/><br/>
+      <font size="-2">Visit <?php print $featured_videos[0]['artist_name'][1] ?>'s artist <a href="<?php print $featured_videos[0]['artist_media_page_url']?>">page</a>.</font>
+      <hr/>
+      <br/>
+      <font size="-2">Each featured artist has their own media page and weblog. Take the time to browse them.</font>
+    </div>
+  </div>
+
+  <div id="mediasection">
+    <div id="media">
+      <table>
+        <tr>
+          <?php
+	    $i = 0;
+	    foreach($featured_videos as $current_video) {
+	      $img_preview_url = $current_video['preview_url'];
+	      $img_video_url = $current_video['video_url'];
+	      $img_title_label = $current_video['media_title'][0];
+	      $img_title = $current_video['media_title'][1];
+	      $img_artist_label = $current_video['artist_name'][0];
+      	      $img_artist = $current_video['artist_name'][1];
+	      $img_media_type_label = $current_video['media_type'][0];
+	      $img_media_type = $current_video['media_type'][1];
+	      $img_artist_media_page_url = $current_video['artist_media_page_url'];
+	      $img_custom1_label = $current_video['field_custom1'][0];
+	      $img_custom1 = $current_video['field_custom1'][1];
+	      $img_custom2_label = $current_video['field_custom2'][0];
+	      $img_custom2 = $current_video['field_custom2'][1];
+	      $img_custom3_label = $current_video['field_custom3'][0];
+	      $img_custom3 = $current_video['field_custom3'][1];
+	      $label_file = path_to_theme() . "/images/label-". $img_media_type .".gif";
+	      if (file_exists($label_file)) {
+                $media_type_img = $label_file;
+	      }
+	      else {
+                $media_type_img = path_to_theme() . "/images/label-video.gif";
+              }
+              print "<td width='75px' height='90px'><img src=$img_preview_url width='64px' height='80px' onclick='updatepreview(\"$img_preview_url\", \"$img_video_url\",\"$img_title_label\",\"$img_title\",\"$img_artist_label\",\"$img_artist\",\"$img_media_type_label\",\"$img_media_type\",\"$img_artist_media_page_url\", \"$img_custom1_label\", \"$img_custom1\", \"$img_custom2_label\", \"$img_custom2\", \"$img_custom3_label\", \"$img_custom3\")' /><img src=$media_type_img /></td>";
+              $i++;
+              if($i == 5) {
+		print "</tr><tr>";
+	      }
+	      if($i > 10) {
+		break;
+	      }
+	    }
+	  ?>
+
+
+        </tr>
+      </table>
+    </div>
+    <div id="preview">
+      <table>
+        <tr><td>
+          <img id="previewImage" src="<?php print $featured_videos[0]['preview_url'] ?>" width="64px" height="80px" align="left"/>
+          <?php
+	      $current_video = $featured_videos[0];
+	      $img_video_url = $current_video['video_url'];
+	      $img_title_label = $current_video['media_title'][0];
+	      $img_title = $current_video['media_title'][1];
+	      $img_artist_label = $current_video['artist_name'][0];
+      	      $img_artist = $current_video['artist_name'][1];
+	      $img_media_type_label = $current_video['media_type'][0];
+	      $img_media_type = $current_video['media_type'][1];
+	      $img_artist_media_page_url = $current_video['artist_media_page_url'];
+	      $img_custom1_label = $current_video['field_custom1'][0];
+	      $img_custom1 = $current_video['field_custom1'][1];
+	      $img_custom2_label = $current_video['field_custom2'][0];
+	      $img_custom2 = $current_video['field_custom2'][1];
+	      $img_custom3_label = $current_video['field_custom3'][0];
+	      $img_custom3 = $current_video['field_custom3'][1];
+
+          ?>
+          <!-- hidden fields to store the value of the metadata of the selected media file -->
+          <input id= "videourl" name="videourl" type="hidden" value=<?php print $img_video_url ?> />
+          <input id="titlelabel" name="titlelabel" type="hidden" value=<?php print $img_title_label ?> />
+          <input id="title" name="title" type="hidden" value=<?php print $img_title ?> />
+          <input id="artistlabel" name="artistlabel" type="hidden" value=<?php print $img_artist_label ?> />
+          <input id="artist" name="artist" type="hidden" value=<?php print $img_artist ?> />
+          <input id="mediatypelabel" name="mediatypelabel" type="hidden" value=<?php print $img_media_type_label ?> />
+          <input id="mediatype" name="mediatype" type="hidden" value=<?php print $img_media_type ?> />
+          <input id="artistmediapage" name="artistmediapage" type="hidden" value=<?php print $img_artist_media_page_url ?> />
+          <input id="custom1label" name="custom1label" type="hidden" value=<?php print $img_custom1_label ?> />
+          <input id="custom1" name="custom1" type="hidden" value=<?php print $img_custom1 ?> />
+          <input id="custom2label" name="custom2label" type="hidden" value=<?php print $img_custom2_label ?> />
+          <input id="custom2" name="custom2" type="hidden" value=<?php print $img_custom2 ?> />
+          <input id="custom3label" name="custom3label" type="hidden" value=<?php print $img_custom3_label ?> />
+          <input id="custom3" name="custom3" type="hidden" value=<?php print $img_custom3 ?> />
+          <!-- hidden fields ends -->
+
+
+
+
+          
+          <div align="left" id="previewImageText">
+	    <font size="-2"><b><?php print $featured_videos[0]['media_title'][1] ?></b><br/><?php print $featured_videos[0]['artist_name'][1] ?><br/><?php print $featured_videos[0]['field_custom1'][1] ?><br/><?php print $featured_videos[0]['field_custom2'][0]  ?><br/></font>
+	  </div>
+        </td></tr>
+        <tr><td>
+          <br/>
+          <img src="<?php print path_to_theme() ?>/images/click-to-play-above.gif" align="left" onclick="playmedia('<?php print path_to_theme() ?>')" /><br/>
+          <hr color="White" />
+          <div id="videoDescription">
+            <font size="-3">Video: <?php print $img_media_type ?> Short</font>
+          </div>
+	</td></tr>
+      </table>
+    </div>
+  </div>
+  <!-- <div id="music-text-audio">
+    <div id="music" class="media-type">
+      <table border="1" width="178px" height="230px">
+        <tr height="20px">
+	  <td>
+	    <div class="media-heading">
+	      <font color="White">MUSIC</font>
+	    </div>
+	  </td>
+	</tr>
+        <?php foreach($music as $current_music) {?>
+        <tr height="40px" width="178px">
+	  <td>
+            <div class="left-aligned-media">
+	      <b><?php print $current_music['media_author'] ?></b><br/><?php print $current_music['media_title'] ?>
+	    </div>
+            <div class="right-aligned">
+	      <a href="<?php print $current_music['media_url'] ?>">Play <?php print $current_music['format'] ?></a><br/><a href="<?php print $current_music['media_page_url'] ?>">media page</a>
+	    </div>
+          </td>
+	</tr>
+        <?php } ?>
+      </table>
+    </div>
+    <div id="audio" class="media-type">
+      <table border="1" width="178px" height="230px">
+        <tr height="20px">
+	  <td>
+	    <div class="media-heading">
+	      <font color="White">AUDIO</font>
+	    </div>
+	  </td>
+	</tr>
+	<?php foreach($audio as $current_audio) {?>
+          <tr height="50px">
+	    <td>
+              <div class="left-aligned-media">
+	        <b><?php print $current_audio['media_title'] ?></b><br/><?php print $current_audio['field_custom1'] ?>
+              </div>
+              <div class="right-aligned">
+	        <a href="<?php print $current_audio['media_url'] ?>">Play <?php print $current_audio['format'] ?></a><br/><a href="<?php print $current_audio['media_page_url'] ?>">media page</a>
+              </div>
+            </td>
+	  </tr>
+        <?php } ?>
+      </table>
+    </div>
+    <div id="text" class="media-type">
+      <table border="1" width="178px" height="230px">
+        <tr height="20px">
+	  <td>
+	    <div class="media-heading">
+	      <font color="White">TEXT</font>
+	    </div>
+	  </td>
+	</tr>
+        <?php foreach($text as $current_text) { ?>
+        <tr height="50px">
+	  <td>
+            <div class="left-aligned-media">
+	      <b><?php print $current_text['media_title'] ?></b><br/><?php print $current_text['field_custom1'] ?>
+	    </div>
+            <div class="right-aligned">
+              <a href="<?php print $current_text['media_url'] ?>">Play <?php print $current_text['format'] ?></a><br/><a href="<?php print $current_text['media_page_url'] ?>">media page</a>
+	    </div>
+          </td>
+	</tr>
+        <?php } ?>
+      </table>
+    </div>
+  </div>
+</center> -->
+ 
+ <div id="weblog">
+    <div id="weblog-heading">
+      <font size="+1" color="white">Ourmedia Weblog</font>
+    </div>
+    <div id="weblog-content" align="left" class="homepage-ourmedia_weblog">
+      <?php print $blog ?>
+    </div>
+  </div>
+</div>
+</center>
+

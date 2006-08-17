@@ -1,0 +1,523 @@
+<?php
+/* $Id: theme_editor.module,v 1.2 2004/11/17 18:57:07 drumm Exp $ */
+
+/**
+ * @file
+ * This module enables an administrator to edit themes. 
+ * The options include functionality for:
+ *   - selecting the directory which contains your themes ('configure')
+ *   - selecting a theme to copy and edit ('start over')
+ *   - uploading files to the theme currently being edited ('upload')
+ *   - creating files to be a part of the theme currently being edited ('create')
+ *   - editing/deleting files already in the theme ('files')
+ */
+
+ 
+/**
+ * Implementation of hook_help
+ */ 
+
+function theme_editor_help($field) {
+  switch ($field) {
+    case 'admin/modules#description':
+      return t('Enable theme editor module.');
+    case 'admin/theme_editor':
+      return t('Select an operation to edit, delete, or rename a particular theme.');
+    case 'admin/theme_editor/new':
+      return t('You may seperately customize a fresh copy of any theme from the list.');
+  }
+}
+
+
+/**
+ * Implementation of hook_menu.
+ */
+function theme_editor_menu($may_cache) {
+  $links = array();
+  if ($may_cache) {
+    $links[] = array('path' => 'admin/theme_editor', 'title' => t('theme editor'), 'access' => user_access('administer site configuration'), 'callback' => 'theme_editor_list');
+    $links[] = array('path' => 'admin/theme_editor/list', 'title' => t('list'), 'access' => user_access('administer site configuration'), 'type' => MENU_DEFAULT_LOCAL_TASK, 'callback' => 'theme_editor_list', 'weight' => -10);
+    $links[] = array('path' => 'admin/theme_editor/startover', 'title' => t('new'), 'access' => user_access('administer site configuration'), 'type' => MENU_LOCAL_TASK, 'callback' => 'theme_editor_select', 'weight' => 9);
+    $links[] = array('path' => 'admin/theme_editor/configure', 'title' => t('configure'), 'access' => user_access('administer site configuration'), 'type' => MENU_LOCAL_TASK ,'callback' => 'theme_editor_configure', 'weight' => 10);
+  }
+  else {
+    if (arg(3)) {
+      $links[] = array('path' => 'admin/theme_editor/edit/'. arg(3), 'title' => arg(3), 'access' => user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_edit');
+      $links[] = array('path' => 'admin/theme_editor/delete/'. arg(3), 'title' => '', 'access' => user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_delete');
+      $links[] = array('path' => 'admin/theme_editor/addfile/'. arg(3), 'title' => '', 'access' =>user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_addfile');
+      $links[] = array('path' => 'admin/theme_editor/upload/'. arg(3), 'title' => '', 'access' => user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_uploadfile');
+      $links[] = array('path' => 'admin/theme_editor/rename/'. arg(3), 'title' => 'rename a customized theme', 'access' => user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_rename');
+    }
+  
+    if (arg(2) == 'view') {
+      $links[] = array('path' => 'admin/theme_editor/view/'. arg(3) .'/'. arg(4), 'title' => arg(3) .'/'. arg(4), 'access' => user_access('administer site configuration'), 'type' => MENU_CALLBACK, 'callback' => 'theme_editor_view_image');
+    }
+  }
+  return $links;
+}
+
+
+function _theme_editor_rename_form($previous_submission = NULL) {
+  $form = form_textfield(t('Rename from %themename', array('%themename' => '<em>'. arg(3) .'</em>')), 'new_name', $previous_submission, 35, 32, t('New name.'));
+  $form .= form_hidden('old_name', arg(3));
+  $form .= form_submit(t('Rename'));
+  $form .= form_submit(t('Cancel'));
+  $form = form($form, 'post', url('admin/theme_editor/rename/'. arg(3)));
+  drupal_set_breadcrumb(array(l(t('Home'), NULL), l(t('administer'), 'admin'), l(t('theme editor'), 'admin/theme_editor')));
+  print theme('page', $form);  
+}
+
+
+function theme_editor_rename() {
+  if (!$_POST) {
+    $form = form_textfield(t('Rename from %themename', array('%themename' => '<em>'. arg(3) .'</em>')), 'new_name', '', 35, 32, t('New name.'));
+    $form .= form_hidden('old_name', arg(3));
+    $form .= form_submit(t('Rename'));
+    $form .= form_submit(t('Cancel'));
+    $form = form($form, 'post', url('admin/theme_editor/rename/'. arg(3)));
+    drupal_set_breadcrumb(array(l(t('Home'), NULL), l(t('administer'), 'admin'), l(t('theme editor'), 'admin/theme_editor')));
+    print theme('page', $form);  
+  }
+  else {
+    $edit = $_POST['edit'];
+    if ($_POST['op'] == t('Cancel')) {
+      drupal_set_message(t('The customized theme %themename was not renamed.', array('%themename' => '<em>'. arg(3) .'</em>')));
+      drupal_goto('admin/theme_editor');
+    }
+    else {
+      $edit['new_name'] = trim($edit['new_name']);
+      
+      if (substr_count($edit['new_name'], ' ')) {
+        drupal_set_message(t('Spaces are not allowed in theme names.  Please choose a different name.'), 'error');
+        _theme_editor_rename_form($edit['new_name']);
+	return;
+      }
+      
+      if (is_dir(file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. $edit['new_name']))) {
+        drupal_set_message(t('A customized theme named %new_name already exists.', array('%new_name' => '<em>'. $edit['new_name'] .'</em>')), 'error');
+        _theme_editor_rename_form($edit['new_name']);
+        return;
+      }
+    
+      $successful = rename(file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. $edit['old_name']), file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. $edit['new_name']));
+      if ($successful) {
+        drupal_set_message(t('Renamed custom theme from %old_name to %new_name.', array('%old_name' => '<em>'. $edit['old_name'] .'</em>', '%new_name' => '<em>'. $edit['new_name'] .'</em>')));
+      }
+      else {
+        drupal_set_message(t('There was an error in renaming the custom theme from %old_name to %new_name.', array('%old_name' => $edit['old_name'], '%new_name' => $edit['new_name'])), 'error');
+      }
+      drupal_goto('admin/theme_editor');
+    }
+  }
+}
+
+
+function theme_editor_uploadfile() {
+  if ($file = file_save_upload('upload', variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) )) {
+    drupal_set_message(t('Uploaded %filename.', array('%filename' => '<em>'. $file->filename .'</em>')));
+  }
+  else {
+    drupal_set_message(t('No file was uploaded.'), 'error');
+  }
+  drupal_goto('admin/theme_editor/edit/'. arg(3));
+}
+
+
+function theme_editor_delete() {
+  if (!arg(4)) { //check to see if we are deleting a theme or a file in the theme
+    // we are deleting a whole template
+    $themename = array('%themename' => '<em>'. arg(3) .'</em>');
+    
+    if ($_POST) { // if there are post variables, we are dealing with a submission from
+                  // a delete confirmation
+      if ($_POST['op'] == t('No')) { // case where theme deletion has been cancelled
+        drupal_set_message(t('The custom theme %themename was not deleted.', $themename));
+      }
+      else { // case where theme deletion has been confirmed
+      
+        // attempt to remove directory and all files in the directory
+        // set error message if something goes wrong.
+        // In any case, continue back to the themes listing page
+
+        $path = file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3));
+        
+        $theme_files = file_scan_directory(file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3)), '.*', array('.', '..', 'CVS'), 0, FALSE);
+        
+        foreach (array_keys($theme_files) as $theme_file) {
+          file_delete($theme_file);
+        }
+        
+        $successful = rmdir(file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3)));
+        if (!$successful) {
+          drupal_set_message(t('Could not entirely delete the custom theme %themename.  Though there may be no files, the directory still exists', $themename));
+        }
+        else {
+          drupal_set_message(t('The custom theme %themename was deleted.', $themename));
+        }
+      }
+      drupal_goto('admin/theme_editor');
+      
+    }
+    else { // case where we need to confirm deletion of an entire template
+      $output = t('Do you really want to delete the custom theme, %themename?', $themename);
+      $output .= form(form_submit(t('Yes')) . form_submit(t('No')), 'post');
+      print theme('page', $output);
+    }
+  }
+  else { // we have an arg(4), meaning we are trying to delete a file in a template
+    $filename = array('%filename' => '<em>'. arg(3) .'/'. arg(4) .'</em>');
+    if ($_POST) { // If $_POST is set, the user has submitted a 'Yes' or 'No' to confirming
+                  // the deletion of a file
+      if ($_POST['op'] == t('No')) {
+        drupal_set_message(t('The file %filename was not deleted.', $filename));
+      }
+      else {
+        $successful = file_delete(file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) .'/'. arg(4)));
+        if ($successful) {
+          drupal_set_message(t('The file, %filename, was removed from the theme.', $filename));
+        }
+        else {
+          drupal_set_message(t('Could not delete the file, %filename, from the theme.', $filename), 'error');
+        }
+      }
+      drupal_goto('admin/theme_editor/edit/'. arg(3));
+    }
+    else { // Return a deletion confirmation page for the file.
+      $output = t('Do you really want to delete this file, %file?', array('%file' => '<em>'. arg(3) .'/'. arg(4) . '</em>'));
+      $output .= form(form_submit(t('Yes')) . form_submit(t('No')), 'post');
+      print theme('page', $output);
+    }
+  }
+}
+
+
+function theme_editor_addfile() {
+  if ($_POST) {
+    $edit = $_POST['edit'];
+    file_save_data('', variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) .'/'. $edit['create_file'],  FILE_EXISTS_RENAME);
+    drupal_set_message(t('A new file, %filename, has been added to the theme.', array('%filename' => '<em>'. arg(3) .'/'. arg(4) .'</em>')));
+  }
+  drupal_goto('admin/theme_editor/edit/'. arg(3));
+}
+
+function theme_editor_configure() {
+  if ($_POST) {
+    system_settings_save();
+  }
+
+  if ($error = _theme_editor_check_dir()) {
+    drupal_set_message($error, 'error');
+  }
+
+  $form = form_textfield(t('Theme storage directory'), 'theme_editor_path', variable_get('theme_editor_path', 'theme_editor'), 50, 255, t('Subdirectory in the directory \'%dir\' where theme files will be stored.', array('%dir' => file_create_path(variable_get('file_directory_path', 'files') .'/')  ))); 
+
+  print theme('page', system_settings_form($form));
+}
+
+
+function theme_editor_list() {
+  if ($error = _theme_editor_check_dir()) {
+    drupal_set_message($error .' '. t('You may set this in the <a href="%conf_url">theme editor\'s configuration page</a>.', array('%conf_url' => url('admin/theme_editor/configure'))), 'error');
+    print theme('page', '');
+    return;
+  }
+  
+  $theme_editor_directory = file_create_path(variable_get('theme_editor_path', 'theme_editor'));
+  
+  $header = array(t('Customized themes'), array('data' => t('Operations'), 'colspan' => 3));
+  
+  $contents = file_scan_directory($theme_editor_directory, '.*', array('.', '..', 'CVS'), 0, $recurse = FALSE);
+
+  $rows[] = array();
+  foreach ($contents as $key => $subdir) {
+    if (!$subdir->name) {
+      $row = array();
+      $theme_name = str_replace($theme_editor_directory . (PHP_OS == 'WINNT' ? '\\' : '/'), '', $key);
+      $row[] = $theme_name;
+      $row[] = l(t('edit'), 'admin/theme_editor/edit/'. $theme_name);
+      $row[] = l(t('delete'), 'admin/theme_editor/delete/'. $theme_name);
+      $row[] = l(t('rename'), 'admin/theme_editor/rename/'. $theme_name);
+      $rows[] = $row;
+      unset($row);
+      unset($theme_name);
+    }
+  }
+  print theme('page', theme('table', $header, $rows));
+}
+
+function theme_editor_create_display() {
+  $form = form_textfield(t('Create file'), 'create_file', '', 35, 32, t('Name for new file.'));
+  $form .= form_submit(t('Create'));
+  $output .= form($form, 'post', url('admin/theme_editor'));
+  return $output;
+}
+
+function theme_editor_startover_display() {
+  $output .= '<p>You may start over with a fresh copy of any theme.</p>';
+  $output .= form(form_submit(t('Start over')), 'post', url('admin/theme_editor/startover'));
+  return $output;
+}
+
+
+function theme_editor_edit() {
+  // If given only a theme name, but no filename, we want to only display the files in the theme.
+  if (!arg(4)) {
+    theme_editor_files_display();
+  }
+  else { // If there is a filename, then we want to display an edit screen for it.
+         // In the case of a post, the file modifications have probably been submitted,
+         // in which case we want to just go back to the files display.
+    theme_editor_edit_file();
+  }
+}
+
+function _theme_editor_file_editable($filename) {
+  if ( ((strcasecmp(strrchr($filename, '.'), '.jpeg')) == 0) || ((strcasecmp(strrchr($filename, '.'), '.jpe')) == 0) || ((strcasecmp(strrchr($filename, '.'), '.jpg')) == 0) || ((strcasecmp(strrchr($filename, '.'), '.gif')) == 0) || ((strcasecmp(strrchr($filename, '.'), '.png')) == 0) || ((strcasecmp(strrchr($filename, '.'), '.bmp')) == 0) ) {
+    return FALSE;
+  }
+  else {
+    return TRUE;
+  }
+}
+
+function theme_editor_files_display() {
+  if ($error = _theme_editor_check_dir()) {
+    drupal_set_message($error .' '. t('You may set this in the <a href="%conf_url">theme editor\'s configuration page</a>.', array('%conf_url' => url('admin/settings/theme_editor'))), 'error');
+    return '';
+  }
+  
+  $subdir = arg(3);
+  
+  $header = array(t('File name'), array('data' => t('Operations'), 'colspan' => 2));
+  $dirname = file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. $subdir);
+  $dir = file_scan_directory($dirname, '.*');
+
+  foreach ($dir as $file) {
+    $pathlength = strlen($dirname) + 1;
+    $filename = substr($file->filename, $pathlength);
+    if (!(strrchr($filename, '/'))) { // only show subdirectories
+      $row[] = $filename;
+
+      // if file is of binary type, do not generate edit link for it 
+      if (_theme_editor_file_editable($filename)) {
+        $row[] = l(t('edit'), 'admin/theme_editor/edit/'. $subdir .'/'. $filename);
+      } // instead generate a view link for it (as it is an image)
+      else {
+        $row[] = l(t('view'), 'admin/theme_editor/view/'. $subdir .'/'. $filename);
+      }
+
+      // generate a delete link for each file
+      $row[] = l(t('delete'), 'admin/theme_editor/delete/'. $subdir .'/'. $filename);
+     
+      $rows[] = $row;
+      unset($row);
+    }
+  }
+  drupal_set_title($subdir);
+  $output = theme('table', $header, $rows);
+
+  $form = form_textfield(t('Create a new file in this theme'), 'create_file', '', 35, 32, t('Name for new file.'));
+  $form .= form_submit(t('Create'));
+  $output .= form($form, 'post', url('admin/theme_editor/addfile/'. arg(3)));	
+  
+  $form = form_file(t('Upload file'), 'upload', 35, t('Select a file to upload to your theme. If a file with the same name already exists this file will be renamed.'));
+  $form .= form_submit(t('Upload'));
+  $output .= form($form, 'post', url('admin/theme_editor/upload/'. arg(3)), array('enctype' => 'multipart/form-data'));
+  
+  print theme('page', $output);
+}
+
+function theme_editor_view_image() {
+  $image_path = file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) .'/'. arg(4));
+  $output = theme('image', $image_path);
+  drupal_set_breadcrumb(array(l(t('Home'), NULL), l(t('administer'), 'admin'), l(t('theme editor'), 'admin/theme_editor'), l(arg(3), 'admin/theme_editor/edit/'. arg(3))));
+
+  print theme('page', $output);
+}
+
+function theme_editor_edit_file() {
+  if (!$_POST) {
+    drupal_set_title(t('Edit %filename', array('%filename' => '<em>'. arg(3) .'/'. arg(4) .'</em>' )));
+      
+    // get contents of a file into a string
+    $filepath = file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) .'/'. arg(4));
+    $size = filesize($filepath);
+    if ($size != 0) {
+      $handle = fopen($filepath, 'r');
+      $contents = fread($handle, $size);
+      fclose($handle);
+    }
+    else {
+      $contents = '';
+    }
+    drupal_set_breadcrumb(array(l(t('Home'), NULL), l(t('administer'), 'admin'), l(t('theme editor'), 'admin/theme_editor'), l(arg(3), 'admin/theme_editor/edit/'. arg(3))));
+    print theme('page',  _theme_editor_edit_form(arg(3). '/' .arg(4), $contents));
+  }
+  else {
+    $edit = $_POST['edit'];
+    $status = file_save_data($edit['edit_file'], file_create_path(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(3) .'/'. arg(4)), 1);
+    if ($status) {
+      drupal_set_message(t('Saved %filename', array('%filename' => '<em>'. arg(3) .'/'. arg(4) .'</em>') ));
+      drupal_goto('admin/theme_editor/edit/'. arg(3));
+    }
+    else {
+      drupal_set_message(t('Could not save %filename', array('%filename' => '<em>'. arg(3) .'/'. arg(4) .'</em>')), 'error');
+      drupal_goto();
+    }
+    drupal_goto('admin/theme_editor/edit/'. arg(3));
+  }
+}
+
+
+/**
+ * This function returns a form that displays the contents with the filename given by the same-named parameter.
+ * This function is called when theme_editor_page() is passed an op or url that specifies 'edit' as the operation
+ */
+function _theme_editor_edit_form($filename, $contents) {
+  $form = form_item(t('Url for this file'), file_create_url(variable_get('theme_editor_path', 'theme_editor') .'/'. arg(4)), t('Some files, such as php files, are not downloadable.'));
+  $form .= form_textarea(arg(4), 'edit_file', $contents, 80, 30);
+  $form .= form_submit(t('Save'));
+  return form($form);
+}
+
+
+/**
+ * This function returns different displays for the theme_editor options under admin/theme_editor.
+ * It serves as a helper function to theme_editor_page() which calls theme() on the ret. val. of 
+ * this function.
+ *
+ * The parameter $opname is expected to be one of "create", "upload", or "files".
+ * For "create": the function returns a form prompting the user to create a new file to be included
+ *               in the current theme that is currently open for editing.
+ *
+ * For "upload": the function returns a form allowing the user to upload a file to be included
+ *               in the theme that is currently being edited.  
+ *
+ *
+ * For "files": the function defaults to a listing of files that are a part of the theme currently
+ *              being edited.  The listing is a table with links next to each file that enable the user
+ *              to edit or delete a file
+ */
+function theme_editor_op_display($opname) {
+  $output = '';
+  switch ($opname) {
+    case 'create':
+      $form = form_textfield(t('Create file'), 'create_file', '', 35, 32, t('Name for new file.'));
+      $form .= form_submit(t('Create'));
+      $output .= form($form, 'post', url('admin/theme_editor'));	
+      return $output;
+    case 'upload':
+      $form = form_file(t('Upload file'), 'upload', 35, t('Select a file to upload to your theme. If a file with the same name already exists this file will be renamed.'));
+      $form .= form_submit(t('Upload'));
+      $output .= form($form, 'post', url('admin/theme_editor'), array('enctype' => 'multipart/form-data'));
+      return $output;
+    default:
+      $output .= theme_editor_files_display();
+      return $output;
+  }
+}
+
+
+ /**
+  * This function returns the form used to select the original theme whose files are
+  * to be copied to the theme_editor directory for editing.
+  *
+  * The function is called when the user selects the "start over" tab and presses the
+  * "Continue" button on the single-button form for verifying the user's intent to
+  * overwrite the current contents of the theme editing directory.
+  *
+  * The call to this function is made from theme_editor_page() when it receives an op of "Start over"
+  *
+  */
+function theme_editor_select() {
+  $slash = (PHP_OS == 'WINNT' ? '\\' : '/');
+  
+  if ($_POST) { // A theme has been selected from the form generated by the else clause.
+    $edit = $_POST['edit'];
+    $themes = system_theme_data();
+    $new_theme_name = _theme_editor_new_dirname($edit['theme_editor_theme'] . '_customized');
+    $dest = variable_get('theme_editor_path', 'theme_editor') . $slash . $new_theme_name;
+    $source = $themes[$edit['theme_editor_theme']]->description;
+
+    drupal_set_message(t('Copied files to new customized theme: %newtheme.', array('%newtheme' => '<em>'. $new_theme_name .'</em>')));
+    theme_editor_copy($source, $dest);
+    drupal_goto('admin/theme_editor/edit/'. $new_theme_name);
+  }
+  else { // Generate the form to 
+    $files = array();
+
+    foreach (system_theme_data() as $name => $theme) {
+      $files[$name] = $name;
+    }
+    $form_select = form_select(t('theme'), 'theme_editor_theme', variable_get('theme_editor_theme', 'default'), $files, t('The selected theme will be copied to the theme_editor folder for editing.'));
+    $form_button = form_submit(t('Submit'));
+    $output .= form($form_select . $form_button, 'post', url('admin/theme_editor/startover'));
+
+    print theme('page', $output);
+  }
+}
+
+
+function _theme_editor_new_dirname($theme_name) {
+  $slash = (PHP_OS == 'WINNT' ? '\\' : '/');
+  $prefix = variable_get('file_directory_path', 'files') . $slash . variable_get('theme_editor_path', 'theme_editor') . $slash;
+  if (!is_dir($prefix . $theme_name)) {
+    return $theme_name;
+  }
+  else {
+    $counter = 0;
+    while (is_dir($prefix . $theme_name .'_'. $counter)) {
+      $counter++;
+    }
+    return $theme_name .'_'. $counter;
+  }
+}
+
+
+// need a function to determine if a theme is template driven or driven by a .theme file
+function _theme_editor_contains_dot_theme($dirname) {
+  $slash = (PHP_OS == 'WINNT' ? '\\' : '/');
+  $fd = opendir('themes'. $slash . $dirname);
+  while ($file = readdir($fd)) {
+    if ((strcasecmp(strrchr($file, '.'), '.theme')) == 0) {
+      closedir($fd);
+      return TRUE;
+    }
+  }
+  closedir($fd);
+  return FALSE;
+}
+
+
+/**
+ * This function is used to copy the contents of one directory to another.
+ * It is called indirectly when a user chooses to overwrite the contents of
+ * the theme editing directory with the files of the theme that's been
+ * selected for editing.
+ */
+function theme_editor_copy($source, $dest) {
+  // reads a file from source, then writes it to dest
+  // does not write subdirectories
+  $slash = (PHP_OS == 'WINNT' ? '\\' : '/');
+  if ($handle = opendir($source)) {
+    mkdir(variable_get('file_directory_path', 'files') . $slash .$dest);
+    while (false !== ($file = readdir($handle))) {
+      if ($file != '.' && $file != '..') {
+        $full_source_path = $source .'/'. $file;
+        if (!is_dir($full_source_path)) {
+          file_copy($full_source_path, $dest, 1);
+        }
+      }
+    }
+  }
+  closedir($handle);
+}
+
+function _theme_editor_check_dir() {
+  $path = file_create_path(variable_get('theme_editor_path', 'theme_editor'));
+  if (!file_check_directory($path, FILE_CREATE_DIRECTORY, 'theme_editor_path')) {
+    return t('The theme storage directory does not exist or is not writable.');
+  }
+}
+
+?>

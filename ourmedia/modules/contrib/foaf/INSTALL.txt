@@ -1,0 +1,14 @@
+$Id: INSTALL.txt,v 1.1 2004/10/19 18:19:31 walkah Exp $
+
+INSTALLATION
+-------------
+1. Copy foaf.module to your modules/ directory
+2. Enable foaf.module at administer -> modules
+3. Go to administer -> settings -> foaf and complete the field mappings
+
+Note: to take full advantage of the field mappings, you must have
+profile.module enabled and configured with appropriate fields made public.
+
+CONTACT
+-------------
+James Walker <walkah@walkah.net>

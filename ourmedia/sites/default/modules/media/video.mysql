@@ -1,0 +1,18 @@
+#
+# Table structure for table `video`
+#
+
+DROP TABLE IF EXISTS video;
+CREATE TABLE video (
+  nid int(10) NOT NULL default '0',
+  video_fileid int(10) default NULL,
+  quicktime_controller tinyint(1) NOT NULL default '0',
+  quicktime_loop tinyint(1) NOT NULL default '0',
+  quicktime_autoplay tinyint(1) NOT NULL default '0',
+  photo_fileid int(10) default NULL,
+  photo_credit varchar(255) default NULL,
+  file_size varchar(255) default NULL,
+  length varchar(255) default NULL,
+  videoformat varchar(255) default NULL,
+  framerate varchar(255) default NULL
+) TYPE=MyISAM;

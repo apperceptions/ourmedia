@@ -1,0 +1,4 @@
+- Using Node Api, create access restrictions whereby users can set nodes to be private,public or buddies only.
+- Add key to pgsql file
+- Update translations
+- Audit permissions

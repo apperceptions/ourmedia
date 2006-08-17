@@ -1,0 +1,24 @@
+TODO:
+  
+- support a command to emit a list of terms used in a post (which might
+  be formatted as a sidebox in an article).
+
+- make another filter which discovers candidate glossary terms
+  (perhaps any sequence of 3 or more capital letters) and save those
+  in a table where the admin "promote" them to glossary term status and
+  give them definitions if they are in fact worthy of glossary status.
+
+  - change backend storage to 'node' instead of 'term' so that entries may be submitted by anyone, and not just
+  taxonomy admins. further, enttries could then be queued, promoted to home page, versioned, etc.
+
+Bugfixes and cleanups to current version which must be done before release:
+  * Add complete doxygen comments
+  * Fix alphabet bar. It has problems when a term does not start with a letter.
+    What to do in UTF8 domain? See also issue 10645. Perhaps only generate
+    letters which are actually used?
+  * Examine and fix other issues
+
+Possible enhancements:
+  * Optionally generate a seperate page for each letter in the glossary
+    overview. Or use the pager. Anyway, the page can now grow arbitrarily long,
+    which is not good.

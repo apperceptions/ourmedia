@@ -1,0 +1,108 @@
+quotes.module
+CHANGELOG.txt
+$Id: CHANGELOG.txt,v 1.3.2.2 2004/11/18 03:21:57 jhriggs Exp $
+
+2004-11-17
+  - release 4.5r3/2004111700
+  - install.inc: upgrade now deletes pre-4.5 random quotes block from
+    blocks table
+  - INSTALL.txt: added note about upgrading 1000 quotes at a time
+
+2004-11-12
+  - release 4.5r2/2004111200
+  - quotes.module
+    - upgrade import page now has help text describing what is
+      happening (addresses bug 12824 reported by TDobes)
+    - "Upgrade" button will properly redirect to
+      node/add/quotes/upgrade even if the tables have already been
+      created (addresses bug 12824 reported by TDobes)
+    - documented the %id variable available in quote title (addresses
+      bug 12824 reported by TDobes)
+    - role and user filter items on add block form now explain that no
+      roles/users are displayed because the 'edit own quotes'
+      permission has not been assigned (documents behavior described
+      in bug 12825 reported by TDobes)
+    - quotes-related links in quotes_link() are not displayed if the
+      module is not installed
+    - non-existent blocks are not displayed (affected upgrades)
+  - install.inc: "Upgrade" button will properly redirect to
+    node/add/quotes/upgrade even if the tables have already been
+    created (addresses bug 12824 reported by TDobes)
+
+2004-11-11
+  - release 4.5r1/2004111100 (versioning changed to better coincide
+    with Drupal versions)
+  - quotes.module
+    - updated for 4.5 (addresses task 8662 created by JonBob)
+    - quotes are now nodes (addresses feature 9205 requested by jbc
+      and most of the items in feature 5242 requested by joe lombardo)
+    - quotes have feeds
+    - author is no longer a required field (addresses feature 7925
+      requested by erikhopp)
+    - fortune files can now be imported (address feature 3748
+      requested by me on behalf of adrian)
+    - administrators can define any number of random quote blocks that
+      can be configured to restrict the quotes displayed based on node
+      IDs, roles, users, and/or categories/terms
+    - the display of individual quotes and pages of quotes is
+      themeable via theme_quotes_quote() and theme_quotes_page(),
+      respectively
+  - install.inc: new PHP file that handles table creation and
+    installation
+  - INSTALL.txt, README.txt: updated for node implementation and
+    multiple blocks
+  - TODO.txt: removed all three entries addressed by this release
+
+2004-03-10
+  - release 1.0.5/2004031000
+  - quotes.module
+    - updated for latest CVS changes (4.4)
+    - updated formatting, variable names
+
+2003-10-27
+  - release 1.0.4/2003102700
+  - quotes.module
+    - removed sub-forms for install/remove buttons in
+      _quotes_settings() as apparently some "lesser" browsers choke on
+      them (reported by GeorgeKao)
+    - added deletion of quotes_leader variable when removing module
+
+2003-10-09
+  - release 1.0.3/2003100900
+  - quotes.module
+    - updated for latest CVS changes (_help() changes, _system()
+      removal, $help removed from menu())
+    - added t() on menu items
+    - added help text for overview, add, and settings pages
+    - replaced preg_replace() with str_replace()
+    - added missing restore_error_handler() call in _quotes_import()
+    - fixed two remaining calls to _quotes_admin_overview() missed in
+      1.0.2/2003100200
+  - TODO: added import via file upload
+
+2003-10-02
+  - release 1.0.2/2003100200
+  - quotes.module
+    - updated for latest CVS changes (integrated admin, etc.);
+      should be 4.3.0-compatible
+    - renamed "private" module functions quotes_* to _quotes_*
+    - added quotes_page() hook that displays all quotes at
+      <http://site.name/quotes> (suggestion by Boris Mann)
+    - renamed quotes_admin_overview() to _quotes_overview() as it is
+      now used both in the admin and in quotes_page() (suggestion by
+      Boris Mann)
+    - paging is handled correctly in _quotes_overview()
+    - untabified
+  - README: updated for TODO
+  - TODO: new file
+
+2003-09-19
+  - release 1.0.1/2003091900
+  - quotes.module: fixed CSS class names used in the block, replacing
+    underscores with dashes (noticed by Boris Mann)
+  - README: added information about CSS classes
+  - README: added note about the cache
+  - INSTALL: added note about cache
+
+2003-09-18
+  - initial release 1.0/2003091800

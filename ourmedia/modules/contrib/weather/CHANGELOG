@@ -1,0 +1,32 @@
+March 21, 2004
+----------------
+o weather module v 1.73
+o added weather cron functionality
+o added re-caching for anonymous pages
+  - the weather block in previously cached pages
+    gets updated whenever the logged in user pages
+    get updated.
+NOTES: both of these features can be used together to keep
+       the weather block up-to-date; however, on sites
+       with several [cached] pages, the re-caching feature
+       can cause significant overhead during the update
+       process, which happens once every hour.
+
+February 19, 2004
+----------------
+o weather module v 1.66:
+o brought to drupal version 4.40 specifications
+o removed XML file-based caching, in favor of a faster
+  database caching method.
+
+February 02, 2004
+----------------
+o weather module v 1.45:
+o changed file I/O from fopen to fsockopen in order to gain greater control
+  over socket timeouts and errors.
+o see todo list
+
+
+January 15, 2004
+----------------
+o initial release.

@@ -1,0 +1,21 @@
+<?php
+
+function trackback_install() {
+  $query = "
+CREATE TABLE {trackback_received} (
+  nid int(10) unsigned NOT NULL,
+  cid int(10) unsigned NOT NULL,
+  url varchar(255) NOT NULL default '',
+  PRIMARY KEY (nid, cid)
+)"; 
+ db_query($query);
+ $query = "
+CREATE TABLE trackback_sent (
+  nid int(10) unsigned NOT NULL,
+  url varchar(255) NOT NULL default '',
+  successful tinyint(1) NOT NULL,
+  PRIMARY KEY (nid, url)
+ )";
+ db_query($query);
+}
+?>

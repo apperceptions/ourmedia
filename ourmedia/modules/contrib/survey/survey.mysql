@@ -1,0 +1,25 @@
+DROP TABLE if exists survey;
+CREATE TABLE survey (
+  nid int(11) unsigned not null,
+  fid int(11) not null,
+  email text,
+  result_page text,
+  primary key(nid)
+);
+
+DROP TABLE if exists survey_responses;
+CREATE TABLE survey_responses (
+  rid int(11) unsigned not null,
+  nid int(11) unsigned not null,
+  uid int(11) unsigned not null,
+  created int(11) not null,
+  primary key (rid)
+);
+
+DROP TABLE if exists survey_fields;
+CREATE TABLE survey_fields (
+  rid int(11) unsigned not null,
+  ffid int(11) not null,
+  value text,
+  primary key (rid, ffid)
+);

@@ -1,0 +1,21 @@
+CREATE TABLE editorselections (
+  id int(10) unsigned NOT NULL auto_increment,
+  media_kind int(11) default NULL, 
+  weight int(11) default NULL,
+  media_url text,
+  media_page_url text,
+  screenshot_path text,
+  media_title text,
+  artist_name text,
+  artist_url text,
+  media_type text,
+  media_format text,
+  label1 text,
+  text1 text,
+  label2 text,
+  text2 text,
+  label3 text,
+  text3 text,
+  screenshot_url text,
+  PRIMARY KEY (id)
+) COMMENT='editor selection data' AUTO_INCREMENT=1;

@@ -1,0 +1,5 @@
+Installation
+------------
+
+1. Copy the 'userpage'  directory to the Drupal modules/ directory. Drupal will
+   automatically detect it. Then enable the module.

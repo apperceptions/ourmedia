@@ -1,0 +1,20 @@
+5 August 2004
+-------------
+- cleaned up code style
+- removed some dead code
+- fixed session handling
+- added better browsing interface
+- notification of new buddies
+
+25 March 2004
+-------------
+Updated to drupal 4.4.0 , and current cvs. Fixed a bug with the anon user being able to have a buddylist
+SD
+7 July 2003
+-----------
+Squished some bugs and verified that it is still working with stock drupal (4.2.0RC)
+
+12 May 2003
+-----------
+[Adrian Rossouw]
+- Initial upload to contrib directory.

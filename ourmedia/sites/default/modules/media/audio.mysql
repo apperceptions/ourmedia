@@ -1,0 +1,15 @@
+#
+# Table structure for table `audio`
+#
+
+DROP TABLE IF EXISTS audio;
+CREATE TABLE audio (
+  nid int(10) NOT NULL default '0',
+  audio_fileid int(10) default NULL,
+  photo_fileid int(10) default NULL,
+  photo_credit varchar(255) default NULL,
+  file_size varchar(255) default NULL,
+  length varchar(255) default NULL,
+  sampling_rate varchar(255) default NULL,
+  recording_mode varchar(255) default NULL
+) TYPE=MyISAM;

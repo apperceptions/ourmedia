@@ -1,0 +1,22 @@
+********************************************************************
+                     D R U P A L    M O D U L E
+********************************************************************
+Name: taxonomy_browser module
+Author: Moshe Weitzman <weitzmna@tejasa.com>
+********************************************************************
+INSTALLATION:
+
+1. Place the entire taxonomy_browser directory into your Drupal modules/
+   directory.
+
+2. Enable this module by navigating to:
+
+     administer > modules
+
+3. Optional: install   node_type_filter.module (http://drupal.org/project/node_type_filter) for node specific category browsing
+
+
+Installation is finished. A new menu item called 'category browser'
+will be visible in the Drupal menu system to click on. Alternatively
+you can navigate to http://example.com/index.php?q=taxonomy_browser.
+This module requires no special user permissions.

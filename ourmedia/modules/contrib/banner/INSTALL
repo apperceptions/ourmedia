@@ -1,0 +1,228 @@
+--------
+WARNING:
+--------
+In order to properly install and configure the banner module, you might need
+some knowledge of PHP, the Drupal themeing system, and of using tools such as
+patch.  This module can be difficult to install.
+
+The following document attempts to make the installation process more clear.
+Please follow these steps carefully and exactly as written before filing a
+support request.  It is advised that you review this entire document before
+you try and install this module.
+
+
+-----------
+Preparation:
+-----------
+
+0) Properly configure 'File system' support for your Drupal installation.
+    (Goto :: administer -> settings :: then find "File system settings")
+   Follow the directions on this page to set a proper "File system path"
+   and "Temporary directory".  When this is properly configured, you will
+   not see any errors.
+
+
+------------
+Installation:
+------------
+
+1) The first thing to do is to update your database, adding the 'banner' table.
+   This can easily be done from the command line by copying the included 
+   'banner.mysql' file to your webserver, then running a command something
+   like:
+      $ mysql -u<username> -p<password> <database> < banner.mysql
+
+   For example, if your username is 'drupal', your password is 'secret', and
+   your database is called 'drupal', you'd type the following command:
+      $ mysql -udrupal -psecret drupal < banner.mysql
+
+2) Move 'banner.module' into your modules/ directory.
+
+3) Move 'banner_db.php' and 'banner_file.php' into your top level Drupal 
+   directory.  Give these files proper permissions so that they can be
+   read by the webserver.
+
+   (These files are added for performance reasons.  By utilizing these files
+    the banner.module can display different banners to different people even
+    on cached pages.  The actual performance gain is realized by not including
+    Drupal's include files each time a banner needs to be displayed...)
+
+4) Now you need to log in to your site and enable the new banner.module.
+    (Goto :: administer -> modules :: then check 'banner')
+
+
+-------------
+Configuration:
+-------------
+
+5) Configure the banner module.  At minimum, it is _HIGHLY_ recommended that
+   you enable the file caching mechanism built into this module.  The rest
+   of the settings can be left at their defaults for now.
+    (Goto :: administer -> settings -> banner)
+   (The file-caching mechanism used by this module greatly increases 
+    banner-display performance.  It is not required, but you will not
+    get very good performance from this module without it.)
+
+6) Setup banner module permissions.
+    (Goto :: administer -> users -> configure -> permissions)
+   - Give 'show banners' permission to users that should see the banners.
+   - Give 'manage banners' permission to users that should be allowed to
+     upload and track view/click statistics for their own banners.
+   - Give 'administer banners' permission to users that should be allowed to
+     add/edit/delete all banners on your site.
+
+
+---------------------------
+Uploading graphical banners:
+---------------------------
+
+7) Upload a new banner via the administrative interface.
+    (Goto :: administer -> banners -> add)
+   - give the banner a descriptive title.  (when you are managing lots of
+     banners, it becomes important that this title describe the banner)
+   - enter a URL where you want clicking on the banner to take you.
+   - set the status to 'enabled' so that the banner is displayed.
+   - scroll to the bottom of the page and click 'browse' to select a banner
+     image to upload.  (it is important that the filename of your image
+     end in three characters indicating the filetype.  Supported image types
+     are:  jpg, jpeg, gif, png, bmp and tiff)
+   - click save.  For now, we'll leave the rest of the options set to their
+     defaults.  Once everything is confirmed to be working on your
+     installation, then you can worry about the more complicated configuration
+     options.
+
+8) Preview the newly uploaded banner.
+    (Goto :: administer -> banners)
+   You should currently see a list of all the banners you've uploaded.  Find
+   the name of the banner you just uploaded, and click 'view' in the options
+   column.  You should now see your banner at the top of the page, along with
+   general information and statistics about the banner.  If you don't see
+   the banner you just uploaded, something has gone wrong.  If you're seeing
+   garbage text instead of the image, then the module failed to recoginze
+   the file type and is instead trying to display the image as text.  Be sure
+   the file name is something like "banner.jpg" or "banner.png", specifically
+   including the three letters at the end appropriate to the file type.
+
+You can see an example of banner ads in action at http://kerneltrap.org/
+
+
+-----------------------------
+Uploading text advertisements:
+-----------------------------
+
+9) Prepare the text ad.
+   Text ads require a little extra manual effort.  Specifically, you must
+   add a link within the the text of the ad that points to the banner's
+   appropriate link url.  After the banner is created, you can find the 
+   banner's id at "administer -> banners".  (Yes, this means you will need
+   to upload the banner twice.  The first time you upload the banner you
+   won't know the new banners id.)
+
+   Assuming the banner has an id of 13, you will need to include a link in
+   the banner's text to the URL "/banner/13".  For example:
+      <a href="http://mysite.com/banner/13">banner text</a>
+
+   Note: Do NOT link directly to where the banner is actually taking you, or
+   the clicks will NOT be counted.  When uploading the banner, you will be
+   able to set the end URL.
+
+10) Upload a new banner via the administrative interface.
+     (Goto :: administer -> banners -> add)
+    - give the banner a descriptive title.  (when you are managing lots of
+      banners, it becomes important that this title describe the banner)
+    - enter a URL where you want clicking on the text ad to take you.
+    - set the status to 'enabled' so that the text ad is displayed.
+    - scroll to the bottom of the page and click 'browse' to select the
+      text file to upload.  (it is advised that the filename of your text
+      ad end in with '.txt'.  If you do not do this, the banner module may
+      not recognize your ad as being text and it may not display properly.)
+    - click save.  For now, we'll leave the rest of the options set to their
+      defaults.  Once everything is confirmed to be working on your
+      installation, then you can worry about the more complicated configuration
+      options.
+
+11) Preview the newly uploaded text ad.
+     (Goto :: administer -> banners)
+    You should currently see a list of all the ads you've uploaded.  Find
+    the name of the text ad you just uploaded, and click 'view' in the options
+    column.  You should now see your text ad at the top of the page, along with
+    general information and statistics about the ad.  If you don't see
+    the text from the ad you just uploaded, something has gone wrong.  Try
+    renaming the text file to end with '.txt' and uploading it again.
+
+You can see an example of text ads in action at http://kerneltrap.org/
+
+
+-------------------------------------------
+Displaying banners and text ads from blocks:
+-------------------------------------------
+
+12) The easiest way to display banners and text ads on your site (easiest
+    because then you do not have to edit your theme) is to display them from
+    a Drupal block.
+     (Goto :: administer -> blocks -> add)
+    - set a title for the block, such as 'Advertisement'
+    - set the input format to 'PHP code'
+    - In the block body, enter the following:
+       <?php return banner_display(); ?>
+    - optionally enter a block description
+    - click 'Save block'
+    - at "administer -> blocks' enable your new block
+
+
+-----------------------------------
+Displaying multiple ads on one page:
+-----------------------------------
+
+13) The banner module currently supports up to ten different unique groups
+    of banners.  The default display group is 0.  You can also display banners
+    from groups 1 thorugh 9.  This allows you to for example display banner
+    ads at the top of your page, and text ads in a block on the side.
+    The display group of a given ad is set when you add the banner, or later
+    by editing it.  To display banners in a different group, you need to pass
+    in the group number when calling banner_display.  For example, to display
+    banners from group 3 you would use the following call:
+       <?php return banner_display(3); ?>
+
+
+-----------------------------------------------
+Displaying banners and text ads from your theme:
+-----------------------------------------------
+
+14) To display a banner from your theme, you will need to modify the theme.
+    How this is done is different for each theme.  Essentially though, you
+    need to add a call to banner_display() in the appropriate place. 
+    (Finding the appropriate place is the challenge.)
+
+    For some simple examples, refer to the sample patches that come with
+    the banner.module.  (The sample patches are in contributed/theme)
+
+    Sorry, I am unable to provide sample patches for all available themes.
+    Please refer to the provided sample patches to better understand how you
+    can patch your favorite themes yourself.
+
+
+---
+FAQ
+---
+Q. I don't see any images.  What's wrong?
+A. Be sure you installed 'banner_db_php' and 'banner_file.php', and
+   properly set the permissions on these files so they can be read
+   by your webserver.   (See step 3 above)
+
+Q. I did install the files correctly, but I still don't see any images.
+   What's wrong?
+A. Try refreshing the banner cache.  Go to:
+      administer >> banner >> refresh cache
+
+Q. I've refreshed my cache, but I'm still not seeing images.  What's wrong?
+A. Edit the banner and be sure that the MIME type was properly detected.  Go
+   to:
+      administer >> banner >> list
+   then click 'edit' next to problematic banner.  At the bottom of the page
+   you can update the MIME type.
+
+   
+---
+Find additional installation tips in the banner module mailing list
+archives:  http://www.kerneltrap.org/mailman/listinfo/drupal-banner

@@ -1,0 +1,454 @@
+<?php
+// $Id: buddylist.module,v 1.39.2.3 2005/06/14 13:24:14 walkah Exp $
+
+/**
+ * Implementation of hook_help
+ */
+function buddylist_help($field) {
+  switch ($field) {
+    case 'admin/modules#description':
+      return t('Enable buddy list functionality.');
+    case 'admin/help#buddylist':
+      $output = t("
+<p>Buddy list enables users to keep a list of buddies from their social network in their user account.  Users can also track what their buddies are posting to the site.  Furthermore, they can track their <i>buddies'</i> buddies and thereby explore their social network.</p>
+<p>If the administrator has enabled the profile module, users can add buddies via their buddies' user profiles.   On the \"View\" tab of each user's profile, there is a \"Buddy list\" section.  Select the 'add buddy' action to add the user to your buddy list.  If a user is already in your buddy list, the 'delete' action will remove the buddy. Administrators can also enable the buddylist block.  This block allows you to see a list of your buddies. If the Friends Of A Friend (FOAF) module is enabled, it will be possible to share buddy lists with other FOAF-aware social networking applications.</p>
+<p>You can</p>
+<ul>
+<li>add a buddy by looking at their profile: <a href = \"%Userprofiles\" title = \"View user profiles\">view user profiles</a></li>
+<li>allow users to view profiles in <a href = \"%setaccesspermissions\" title = \"set access permissions\"> administer &raquo; access control</a></li>
+<li>enable the buddy list block at <a href = \"%blockadministration\" title = \"block administration\">administer &raquo; block</a></li>
+<li>administer the buddy list block at <a href = \"%buddylistsettings\" title = \"buddylist settings\">administer &raquo; settings &raquo; buddylist</a></li>
+</ul>
+
+<p>For more information, read the configuration and customization handbook <a href=\"http://drupal.org/handbook/modules/Buddylist\" title=\"Buddylist page\"> Buddylist page</a></p>", 
+array('%Userprofiles' => url('/profile'),
+      '%setaccesspermissions' => url('/admin/access/permission'),
+      '%blockadministration' => url('/admin/block'),
+      '%buddylistsettings' => url('/admin/settings/buddylist')
+      ));
+      return $output;
+  }
+}
+
+/**
+ * Public API for retrieving buddies. Feel free to use this from other
+ * modules.
+*/
+function buddylist_get_buddies($uid = NULL) {
+  static $buddies;
+
+  if (!$uid) {
+    global $user;
+    $uid = $user->uid;
+  }
+  if (!isset($buddies[$uid])) {
+    $buddies[$uid] = array();
+    $sql = "SELECT b.buddy as uid, u.name, u.mail FROM {buddylist} b INNER JOIN {users} u ON b.buddy = u.uid WHERE b.uid = %d ORDER BY b.timestamp DESC";
+    $result = db_query($sql, $uid);
+    while ($row = db_fetch_object($result)) {
+      $buddies[$uid][$row->uid] = (object) array('uid' => $row->uid, 'name' => $row->name, 'mail' => $row->mail);
+    }
+  }
+  return $buddies[$uid];
+}
+
+/**
+ *  Implements a simple single select box suitable for use in a block
+ *  or in theme, or in another module, for example.
+ */
+function buddylist_select() {
+  global $user;
+
+  if ($buddies = buddylist_get_buddies()) {
+    foreach ($buddies as $buddy) {
+      $options[$buddy->uid] = $buddy->name;
+    }
+    $output = form_select('', 'buddy', $edit['buddy'] ? $edit['buddy'] : '', $options);
+    return $output;
+  }
+}
+
+/**
+ * Implementation of hook_settings
+ */
+function buddylist_settings() {
+  $group .= form_select(t('Number of buddies to list in the user\'s buddy block'), 'buddylist_blocklisting_size', variable_get('buddylist_blocklisting_size', 5), drupal_map_assoc(array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30)), t('This setting controls the maximum number of buddies displayed in a user\'s "buddylist block" given that the "buddylist block" is enabled in the %link.', array('%link' => l(t('block settings'), 'admin/block')) ));
+  $group .= form_select(t('Number of posts to list in the buddies\' recent posts block'), 'buddylist_posts_block', variable_get('buddylist_posts_block', 7), drupal_map_assoc(array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30)), t('This setting controls the maximum number of posts to display in a user\'s "buddy recent posts" block given that the "buddies\' recent posts" block is enabled in the %link.', array('%link' => l(t('block settings'), 'admin/block'))  ));
+  $group .= form_textfield(t('Block title'), 'buddylist_block_title', variable_get('buddylist_block_title', t('My buddies\' recent posts')), 70, 128, t('This will be the title for the recent buddies post block. If none is specified, the default will be used.'));
+  $output .= form_group(t('Buddylist block options'), $group);
+
+  // User profile page settings
+  $group = form_select(t('Number of buddies and users who\'ve added me'), 'buddylist_prof_buddies', variable_get('buddylist_prof_buddies', 5), drupal_map_assoc(array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)), t('The default maximum number of buddies and users who\'ve added me as a buddy to display on a user\'s profile page.'));
+  $output .= form_group(t('Profile page options'), $group);
+
+  return $output;
+}
+
+
+
+// TODO. it looks like $type and $edit are unused
+function buddylist_setmsg_received($thisuser) {
+  global $user;
+
+  $check_received = db_query('SELECT received, b.uid as uid, u.name FROM {buddylist} b LEFT JOIN {users} u ON u.uid = b.uid WHERE buddy = %d AND received = 1', $thisuser->uid);
+  while ($rec = db_fetch_object($check_received)) {
+    if (($rec->received) and ($thisuser->uid == $user->uid)) {
+      drupal_set_message(l($rec->name, 'user/'. $rec->uid) .' has added you to his/her buddylist.');
+      db_query('UPDATE {buddylist} SET received = 0 WHERE buddy = '. $user->uid);
+    }
+  }
+}
+
+/**
+ * Implementation of hook_user
+ */
+function buddylist_user($type, &$edit, &$thisuser, $category = NULL) {
+  global $user;
+
+  // show any buddylist notifications upon login and upon viewing own profile
+  if (user_access('view buddy lists') && (($type == 'login') || ($type == 'view') && ($thisuser->uid == $user->uid))) {
+    buddylist_setmsg_received($thisuser);
+  }
+
+  if ($type == 'view' && user_access('view buddy lists')) {
+    // if thisuser has friends, show friends
+    $cnt = variable_get('buddylist_prof_buddies', 5);
+    if ($buddies = buddylist_get_buddies($thisuser->uid)) {
+      foreach($buddies as $buddy) {
+        $listbuddies[] = format_name($buddy);
+        $i++;
+        if ($i > $cnt) {
+          break;
+        }
+      }
+      $output .= form_item(t('Buddies'), theme('item_list', $listbuddies));
+    }
+
+    // This portion of code is used to see if this $thisuser is a buddy of others and, if s/he is, returns a list
+    // of people s/he is a buddy of.
+    // Note the distinction between having a buddy and being someone else's buddy (i.e., 'buddyof')
+    $sql = 'SELECT b.uid, u.name FROM {buddylist} b INNER JOIN {users} u ON b.uid = u.uid WHERE b.buddy = %d ORDER BY u.changed DESC';
+    $result = db_query_range($sql, $thisuser->uid, 0, $cnt);
+    while ($row = db_fetch_object($result)) {
+      $listbuddiesof[] = format_name($row);
+    }
+    if ($listbuddiesof) {
+      $output .= form_item(t('Buddy of'), theme('item_list', $listbuddiesof));
+    }
+
+    // Check to see whether or not $thisuser is in global $user's buddy list
+    // If $thisuser is already in $user's buddy list, a link offering to delete $thisuser from $user's buddy list is generated
+    // If $thisuser is not on $user's buddy list, and $thisuser != $user, then a link offering to add $thisuser to $user's buddy list
+    // is generated.
+    $_SESSION['buddylist_op_destination'] = $_SERVER['HTTP_REFERER'];
+    if (@in_array($thisuser->uid, array_keys(buddylist_get_buddies($user->uid))) && user_access('maintain buddy list')) {
+      $actions[] = l(t('Remove %name from my buddy list', array('%name' => theme('placeholder', $thisuser->name))), 'buddy/delete/' . $thisuser->uid, NULL, NULL, NULL, FALSE, TRUE);
+    }
+    else {
+      if ($user->uid != $thisuser->uid && user_access('maintain buddy list')) {
+        $actions[] = l(t('Add %name to my buddy list', array('%name' => theme('placeholder', $thisuser->name))), 'buddy/add/' . $thisuser->uid, NULL, NULL, NULL, FALSE, TRUE);
+      }
+    }
+    if ($actions) {
+      $output .= form_item(t('Buddy actions'), theme('item_list', $actions));
+    }
+    return array ('Buddy List' => $output);
+  }
+}
+
+/**
+ * Implementation for hook_block
+ */
+function buddylist_block($op = 'list', $delta = 0) {
+  global $user;
+
+  if ($op == 'list') {
+    $block[0]['info'] = t('Buddy list');
+    $block[1]['info'] = t('Buddies\' recent posts');
+    return $block;
+  }
+  else if ($op == 'view' && user_access('access content') && $user->uid > 0) {
+    switch ($delta) {
+      case 0 : // Shows buddylist block
+        if ($buddies = buddylist_get_buddies()) {
+          foreach ($buddies as $buddy) {
+            $account->link = l((strlen($buddy->name) > 15 ? substr($buddy->name, 0, 15) .'...' : $buddy->name), 'user/'. $buddy->uid);
+            $users[] = $account->link;
+            $i++;
+            if ($i == variable_get('buddylist_blocklisting_size', 5)) {
+              break;
+            }
+          }
+
+          
+          $block['content'] = theme('user_list', $users);
+          $block['subject'] = t('My buddy list');
+          
+          // check if a "more" link should generated by seeing if there are more buddies than the specified $upperlimit
+          if (count($buddies) > variable_get('buddylist_blocklisting_size', 5)) {
+            $block['content'] .=  '<div class="more-link">' . l(t('more'), 'buddylist', array('title' => t('View more.'))) . '</div>';
+          }
+          return $block;
+        }
+        break;
+
+      case 1: // Shows my buddies recent posts block
+
+        $result = db_query_range(db_rewrite_sql('SELECT n.nid, n.format, n.status, n.type, u.uid, u.name, n.created, n.title FROM {buddylist} b LEFT JOIN {node} n ON n.uid=b.buddy LEFT JOIN {users} u ON n.uid = u.uid WHERE n.status = 1 AND b.uid=%d ORDER BY n.nid DESC'), $user->uid, 0, variable_get('buddylist_posts_block', 7));
+
+        if (db_num_rows($result)) {
+          $block['subject'] = variable_get('buddylist_block_title', t('My buddies\' recent posts'));
+          $block['content'] = node_title_list($result);
+          
+          // check if a "more" link should generated by seeing if there are more buddies than the specified $upperlimit
+          $result = db_query(db_rewrite_sql('SELECT COUNT(n.nid) AS node_count FROM {buddylist} b LEFT JOIN {node} n ON n.uid=b.buddy LEFT JOIN {users} u ON n.uid = u.uid WHERE n.status = 1 AND b.uid=%d'), $user->uid);
+          $countresult = db_fetch_object($result);
+          
+          if (variable_get('buddylist_posts_block', 7) < $countresult->node_count) {
+            $block['content'] .= '<div class="more-link">'. l(t('more'), 'buddylist/'. $user->uid .'/buddies/recent', array('title' => t('View more.'))) .'</div>';
+          }
+          return $block;
+        }
+        break;
+    }
+  }
+}
+
+/**
+ * Implementation of hook_perm
+ */
+function buddylist_perm() {
+  return array('maintain buddy list', 'view buddy lists');
+}
+
+/**
+ * Implementation of hook_menu
+ */
+function buddylist_menu($may_cache) {
+  global $user;
+
+  $links = array();
+  $id = arg(1) ? arg(1) : $user->uid;
+  if ($may_cache) {
+    $links[] = array('path' => 'buddylist', 'title' => t('my buddylist'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddylisting_page');
+    $links[] = array('path' => 'buddylist/help', 'title' => t(''), 'access' => user_access('maintain buddy list'), 'callback' => 'buddylist_help', 'type' => MENU_CALLBACK);
+  }
+  elseif ($id) {
+    //tabs
+    $links[] = array('path' => 'buddylist/'. $id .'/buddies', 'title' => t('buddies'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddylisting_page', 'type' => MENU_DEFAULT_LOCAL_TASK, 'weight' => -1, 'callback arguments' => array($id));
+    $links[] = array('path' => 'buddylist/'. $id .'/buddiesof', 'title' => t('buddies of'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddylisting_page','type' => MENU_LOCAL_TASK, 'weight' => 1, 'callback arguments' => array($id, 'buddiesof'));
+    // subtabs
+    $links[] = array('path' => 'buddylist/'. $id .'/buddies/list', 'title' => t('list'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddylisting_page', 'type' => MENU_DEFAULT_LOCAL_TASK, 'weight' => -1);
+    $links[] = array('path' => 'buddylist/'. $id .'/buddies/recent', 'title' => t('recent posts'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddiesrecent_page', 'type' => MENU_LOCAL_TASK, 'weight' => 1);
+    // RSS feeds
+    $links[] = array('path' => 'buddylist/'. $id .'/buddies/recent/feed', 'title' => t('xml feed'), 'access' => user_access('view buddy lists'), 'callback' => 'buddylist_buddyfeed', 'type' => MENU_CALLBACK);
+    // other callbacks
+    $links[] = array('path' => 'buddy/add', 'title' => t('add to buddylist'), 'access' => user_access('maintain buddy list'), 'callback' => 'buddylist_addbuddy', 'type' => MENU_CALLBACK);
+    $links[] = array('path' => 'buddy/delete', 'title' => t('delete from buddylist'), 'access' => user_access('maintain buddy list'), 'callback' => 'buddylist_deletebuddy', 'type' => MENU_CALLBACK);
+  }
+  return $links;
+}
+
+/**
+ * Displays a list of a given user's buddies.
+ */
+function buddylist_buddylisting_page($userid = NULL, $mode = 'buddies') {
+  global $user;
+
+  if (!module_exist('profile')) {
+    drupal_set_message(t('The buddylist module requires the profile module to be enabled in order to use this functionality'), 'error');
+  }
+  if (empty($userid)) {
+    $userid = $user->uid;
+  }
+
+  $thisuser = user_load(array('uid' => $userid));
+  drupal_set_title(t('%username\'s buddylist', array('%username' => $thisuser->name)));
+
+  $output = '<div class="members">';
+
+  $buddies_per_page = 20;
+
+  // Compile a list of fields to show
+  $fields = array();
+  $result = db_query('SELECT name, title, type FROM {profile_fields} WHERE visibility = %d', PROFILE_PUBLIC_LISTINGS);
+  while ($record = db_fetch_object($result)) {
+    $fields[] = $record;
+  }
+
+  //TODO: use the get_buddies function instead
+  if ($mode == 'buddies') {
+    $sql = "SELECT buddy FROM {buddylist} b INNER JOIN {users} u ON b.buddy = u.uid WHERE b.uid = ". db_escape_string($userid) ." ORDER BY u.changed DESC";
+  }
+  else {
+    $sql = "SELECT u.uid as buddy FROM {buddylist} b INNER JOIN {users} u ON b.uid = u.uid WHERE b.buddy = ". db_escape_string($userid) ." ORDER BY u.changed DESC";
+  }
+  $result = pager_query($sql, $buddies_per_page, 0 , NULL);
+
+  $output .= '<div id="profile">';
+
+  if (db_num_rows($result)) {
+    while ($account = db_fetch_object($result)) {
+      $output .= theme('profile_profile', user_load(array('uid' => $account->buddy)), $fields);
+    }
+  }
+  else {
+    $output .= t('none');
+  }
+  $output .= '</div>';
+  $output .= theme('pager', NULL, $buddies_per_page);
+
+  $output .= '</div>';
+  print theme('page',  $output);
+}
+
+function buddylist_buddiesrecent_page() {
+  global $user;
+
+  $userid = arg(1);
+
+  $thisuser = user_load(array('uid' => $userid));
+  drupal_set_title(t('%username\'s buddylist', array('%username' => $thisuser->name)));
+
+  $output = '';
+  $result = pager_query(db_rewrite_sql('SELECT n.nid, n.type, n.format, n.status FROM {node} n LEFT JOIN {buddylist} b ON n.uid = b.buddy WHERE n.status = 1 AND b.uid = '. $userid . ' ORDER BY n.nid DESC'), variable_get('default_nodes_main', 10));
+
+  while ($node = db_fetch_object($result)) {
+      $output .= node_view(node_load(array('nid' => $node->nid)), 1);
+  }
+  $output .= theme('pager', NULL, variable_get('default_nodes_main', 10));
+  $output .= theme('xml_icon', url('buddylist/'. $userid .'/buddies/recent/feed'));
+
+  drupal_set_html_head('<link rel="alternate" type="application/rss+xml" title="RSS - buddies posts" href="'. url('buddylist/'. $user->uid .'/buddies/recent/feed') .'" />');
+  print theme('page',  $output);
+}
+
+
+/**
+ * Feed for buddies recent posts
+ */
+function buddylist_buddyfeed() {
+  global $user;
+  $userid = arg(1);
+
+  $result = db_query(db_rewrite_sql('SELECT n.nid, n.title, n.teaser, n.created, u.name, u.uid FROM {node} n INNER JOIN {users} u ON n.uid = u.uid LEFT JOIN {buddylist} b ON b.buddy = u.uid WHERE n.status = 1 AND b.uid = '. $userid .' ORDER BY n.nid DESC'));
+  $channel['title'] = t('Buddies recent posts on %site', array('%site' => variable_get('site_name', 'drupal')));
+  $channel['link'] = url('buddylist/'. $userid .'/buddies/recent');
+  $channel['description'] = $term->description;
+  node_feed($result, $channel);
+}
+
+
+function buddylist_addbuddy($uid) {
+  global $user;
+
+  $buddy = user_load(array('uid' => $uid));
+  if (empty($buddy->name)) {
+    return t('This user does not exist');
+  }
+  else if (in_array($uid, array_keys(buddylist_get_buddies($user->uid)))) {
+    return t('This user is already on your buddy list');
+  }
+  else if ($user->uid == $uid) {
+    return t('Cannot add yourself to buddy list');
+  }
+  else {
+    if (($_POST['op'] == t('add user')) && $_POST['edit']['confirm']) {
+      buddylist_add($uid);
+      buddylist_goto_referrer();
+    }
+
+    print theme('page', theme('confirm', t('Add user %name to your buddy list?', array('%name' => $buddy->name)), 'user',
+           t('%name will be be notified the next time s/he logs in.', array('%name' => $buddy->name)), t('add user')));
+  }
+}
+
+function buddylist_deletebuddy($uid) {
+  global $user;
+  $buddy = user_load(array('uid' => $uid));
+
+  if (empty($buddy->name)) {
+    return t('This user does not exist');
+  }
+  else if (!in_array($uid, array_keys(buddylist_get_buddies($user->uid)))) {
+    return t('This user is not on your buddy list');
+  }
+  else {
+    if (($_POST['op'] == t('remove user')) && $_POST['edit']['confirm']) {
+      buddylist_remove($uid);
+      buddylist_goto_referrer();
+    }
+    print theme('page', theme('confirm', t('Remove user %name from your buddy list?', array('%name' => $buddy->name)), 'user',
+           t('%name will be not be notified the next time s/he logs in.', array('%name' => $buddy->name)), t('remove user')));
+  }
+}
+
+function buddylist_add($id) {
+  global $user;
+  $user_to_add = user_load(array('uid' => $id));
+
+  if (!in_array($id, array_keys(buddylist_get_buddies($user->uid)))) {
+    db_query('INSERT INTO {buddylist} (received, uid, buddy, timestamp) VALUES (1, %d, %d, %d)' , $user->uid , $id , time());
+    // DB value buddylist.received set to 1, meaning buddy has a message waiting
+    // letting them know you added them as a buddy
+    // buddylist.received set back to 0 when user logs in along with being informed of new buddy
+
+    drupal_set_message(t('%username has been added to your buddy list', array('%username' => theme('placeholder', $user_to_add->name))));
+  } else {
+    drupal_set_message(t('%username is already on your buddylist', array('%username' => theme('placeholder', $user_to_add->name))));
+  }
+}
+
+function buddylist_remove($id) {
+  global $user;
+  db_query('DELETE FROM {buddylist} WHERE uid = %d AND buddy = %d' , $user->uid , $id);
+  $thisuser = user_load(array('uid' => $id));
+  drupal_set_message(t('%username removed from buddylist',array('%username' => theme('placeholder', $thisuser->name )) ));
+}
+
+function buddylist_cancel_add($id) {
+  $thisuser = user_load(array('uid' => $id));
+  drupal_set_message(t('User %name was NOT added to your buddylist.', array('%name' => theme('placeholder', $thisuser->name))));
+}
+
+function buddylist_cancel_remove($id) {
+  $thisuser = user_load(array('uid' => $id));
+  drupal_set_message(t('User %name was NOT removed to your buddylist.', array('%name' => theme('placehodler', $thisuser->name))));
+}
+
+/**
+ * This code is used to redirect a browser back to the url that referred the browser
+ * to the buddylist_add() or buddylist_remove() actions.
+ *
+ * Until a patch comes out that allows us to directly pass a complete
+ * URL to drupal_goto(), we take the code from drupal_goto, and change
+ * the last parameter to str_replace() from a call to url() to the
+ * actual url we want to forward to (and have stored in a session variable)
+ */
+function buddylist_goto_referrer() {
+  // Translate &amp; to simply & in the absolute URL
+  $url = str_replace('&amp;', '&', $_SESSION['buddylist_op_destination']);
+
+  if (ini_get('session.use_trans_sid') && session_id() && !strstr($url, session_id())) {
+    $sid = session_name() . '=' . session_id();
+
+    if (strstr($url, '?') && !strstr($url, $sid)) {
+      $url = $url .'&'. $sid;
+    }
+    else {
+      $url = $url .'?'. $sid;
+    }
+  }
+
+  // Before the redirect, allow modules to react to the end of the page request.
+  module_invoke_all('exit', $url);
+  unset($_SESSION['buddylist_op_destination']);
+  header('Location: '. $url);
+
+  // The "Location" header sends a REDIRECT status code to the http
+  // daemon. In some cases this can go wrong, so we make sure none
+  // of the code below the drupal_goto() call gets executed when we redirect.
+  exit();
+}
+
+?>

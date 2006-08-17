@@ -1,0 +1,1215 @@
+<?php
+
+
+
+/**
+
+ * Gets the featured media (video, audio, music, text) saved using the
+
+ * homepage editor and then call theme_homepage_view to display the contents
+
+ */
+
+function homepage_page() {
+
+  // $featured_videos is the array of 10 video objects.
+
+  // Each video object contains the following fields:
+
+  // 1. preview_url
+
+  // 2. video_url
+
+  // 3. artist_name
+
+  // 4. media_type (Audio, Video, Documentary, ...)
+
+  // 5. artist_media_page_url
+
+  // 6. media_title
+
+  // 7. field_custom1
+
+  // 8. field_custom2
+
+  // 9. field_custom3
+
+  $featured_videos = homepage_get_all_featured_video();
+
+  
+
+  // $music is the array of 5 media objects and each music contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. media_author
+
+  // 4. format
+
+  // 5. media_page_url
+
+  $music = homepage_get_all_featured_music();
+
+  
+
+  // $audio is the array of 4 media objects and each audio contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. field_custom1
+
+  // 4. format
+
+  // 5. media_page_url
+
+  $audio = homepage_get_all_featured_audio();
+
+  
+
+  // $text is the array of 4 media objects and each text contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. field_custom1
+
+  // 4. format
+
+  // 5. media_page_url
+
+  $text = homepage_get_all_featured_text();
+
+  
+
+  // get all the group blogs for ourmedia here
+
+ // $blog = homepage_view_ourmedia_blog();
+
+  $blog = node_page_default();
+
+  
+
+  $welcome_title = t('Welcome to Ourmedia.org');
+
+
+
+  $welcome_text_para1 = t('We provide free storage and free bandwidth for your videos, audio files, photos, text or software. Forever. No catches.');
+
+  $welcome_text_para2 = t('Get recognized for your creativity. Make your voice heard. <a href="user/register" title="why join">Register now</a> and join the personal media revolution.');
+
+  /*
+
+  $welcome_text_para1 = t('Share your videos, audio files, photos, text or software - for free - with a global community of creative individuals.');
+
+  $welcome_text_para2 = t('Get your works noticed and recognized. Make your voice heard. Register now - <a href="user/register" title="why join">here\'s why.</a>');*/
+
+
+
+  print theme('page', theme('homepage_view', $welcome_title, $welcome_text_para1,
+
+                            $welcome_text_para2, $featured_videos, $music,
+
+                $audio, $text, $blog));
+
+}
+
+
+
+/*
+
+ * gets all the featured video information from the database and pushes in an
+
+ * array.
+
+ */
+
+function homepage_get_all_featured_video() {
+
+  $media = array();
+
+
+
+  if ($result = db_query("SELECT * FROM {editorselections} WHERE media_kind=1 AND weight between 1 and 14 order by weight")) {
+
+    while($record = db_fetch_object($result)) {
+
+      $current_video = array(
+
+                       "artist_name" => array("Artist", $record->artist_name),
+
+                       "media_title" => array("Title", $record->media_title),
+
+                       "media_type" => array("Media", $record->media_type),
+
+                       "field_custom1" => array($record->label1, $record->text1),
+
+                       "field_custom2" => array($record->label2, $record->text2),
+
+                       "field_custom3" => array($record->label3, $record->text3),
+
+                       "preview_url" => $record->screenshot_path,
+
+                       "video_url" => $record->media_url,
+
+                       "artist_media_page_url" => $record->artist_url,
+
+                       "media_page_url" => $record->media_page_url,
+
+                       "big_screenshot_url" => $record->screenshot_url  
+
+           );
+
+      array_push($media, $current_video);
+
+    }
+
+  }
+
+  
+
+  return $media;
+
+}
+
+
+
+// $music is the array of 5 media objects and each music contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. media_author
+
+  // 4. format
+
+  // 5. media_page_url
+
+function homepage_get_all_featured_music() {
+
+  $music = array();
+
+  
+
+  if ($result = db_query("SELECT * FROM {editorselections} WHERE media_kind=2 AND weight between 1 and 5 order by weight")) {
+
+    while($record = db_fetch_object($result)) {
+
+      $current_music = array(
+
+                       "media_url" => $record->media_url,
+
+                       "media_title" => $record->media_title,
+
+                       "media_author" => $record->artist_name,
+
+               "format" => $record->media_format,
+
+               "media_page_url" => $record->media_page_url
+
+           );
+
+      array_push($music, $current_music);
+
+    }
+
+  }
+
+  
+
+  return $music;
+
+}
+
+
+
+  // $audio is the array of 4 media objects and each audio contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. field_custom1
+
+  // 4. format
+
+  // 5. media_page_url
+
+function homepage_get_all_featured_audio() {
+
+  $audio = array();
+
+  if ($result = db_query("SELECT * FROM {editorselections} WHERE media_kind=3 AND weight between 1 and 4 order by weight")) {
+
+    while($record = db_fetch_object($result)) {
+
+      $current_audio = array(
+
+                       "media_url" => $record->media_url,
+
+                       "media_title" => $record->media_title,
+
+                       "field_custom1" => $record->text1,
+
+               "format" => $record->media_format,
+
+               "media_page_url" => $record->media_page_url
+
+           );
+
+      array_push($audio, $current_audio);
+
+    }
+
+  }
+
+
+
+  return $audio;
+
+}
+
+
+
+  // $text is the array of 4 media objects and each text contains the
+
+  // following fields:
+
+  // 1. media_url
+
+  // 2. media_title
+
+  // 3. field_custom1
+
+  // 4. format
+
+  // 5. media_page_url
+
+function homepage_get_all_featured_text() {
+
+  $text = array();
+
+  if ($result = db_query("SELECT * FROM {editorselections} WHERE media_kind=4 AND weight between 1 and 4 order by weight")) {
+
+    while($record = db_fetch_object($result)) {
+
+      $current_text = array(
+
+                       "media_url" => $record->media_url,
+
+                       "media_title" => $record->media_title,
+
+                       "field_custom1" => $record->text1,
+
+               "format" => $record->media_format,
+
+               "media_page_url" => $record->media_page_url
+
+           );
+
+      array_push($text, $current_text);
+
+    }
+
+  }
+
+
+
+  return $text;
+
+}
+
+
+
+/**
+
+ * Gets the group blogs of Ourmedia. This uses article module to be installed
+
+ * and enabled.
+
+ */
+
+function homepage_view_ourmedia_blog() {
+
+  $body = '';
+
+  $recent_count = variable_get('article_recent_display', 5);
+
+
+
+  if ($recent_count > 0) {
+
+    $body = theme("box", t("Latest Articles"), node_title_list(article_get_latest($recent_count), "") . theme("more_info", l("<img src=\"misc/xml.png\" alt=\"XML Feed\" \>", "article/feed")));
+
+  }
+
+  $content = article_index();
+
+  return theme("box", t("Article Categories"), $content);
+
+}
+
+
+
+
+
+/**
+
+ * Implementation of hook_help
+
+ */
+
+function homepage_help($section) {
+
+  switch ($section) {
+
+    case 'admin/help#node':
+
+      $output = t('This is the customized version of the homepage for Ourmedia.org');
+
+      break;
+
+
+
+    case 'admin/modules#description':
+
+      $output = t('The homepage for the ourmedia site');
+
+      break;
+
+      
+
+    case 'admin/homepage/edit':
+
+      $output = t('Help for Edit page');
+
+      break;
+
+  }
+
+  return $output;
+
+}
+
+
+
+/**
+
+ * Implementation of hook_perm
+
+ */
+
+function homepage_perm() {
+
+  return array("access content", "edit content");
+
+}
+
+
+
+/**
+
+ * Implementation of hook_menu
+
+ */
+
+function homepage_menu($may_cache) {
+
+  global $user;
+
+  $items = array();
+
+  
+
+  if($may_cache)
+
+  {
+
+    $items[] = array('path' => 'homepage', 'title' => t('Ourmedia Homepage'),
+
+                     'callback' => 'homepage_page',
+
+             'access' => user_access('access content'),
+
+             'type' => MENU_SUGGESTED_ITEM);
+
+             
+
+    $items[] = array('path' => 'homepage/edit', 'title' => t('Ourmedia Homepage Editor'),
+
+                     'callback' => 'homepage_edit',
+
+             'access' => user_access('edit content'),
+
+             'type' => MENU_SUGGESTED_ITEM);
+
+  }
+
+
+
+  return $items;
+
+}
+
+
+
+/**
+
+ * Implementation of hook_edit
+
+ */
+
+function homepage_edit($media_kind=0, $weight=1) {
+
+  if ($media_kind == 0) {
+
+    print_main_page();
+
+    return;
+
+  }
+
+  if (!empty($_POST['op'])){
+
+    $_POST = $_POST['edit'];
+
+    $post_media_kind = $_POST['media_kind'];
+
+    $post_weight = $_POST['weight'];
+
+    $media_url = $_POST['media_url'];
+
+    $media_page_url = $_POST['media_page_url'];
+
+    $screenshot_path  = $_POST['screenshot_path'];
+
+    $media_title = $_POST['media_title'];
+
+    $artist_name = $_POST['artist_name'];
+
+    $artist_url  = $_POST['artist_url'];
+
+    $media_type  = $_POST['media_type'];
+
+    $media_format = $_POST['media_format'];
+
+    $label1      = $_POST['media_custom_1'];
+
+    $text1     = $_POST['media_text_1'];
+
+    $label2      = $_POST['media_custom_2'];
+
+    $text2     = $_POST['media_text_2'];
+
+    $label3      = $_POST['media_custom_3'];
+
+    $text3     = $_POST['media_text_3'];
+
+    $screenshot_selected = $_POST['screenshot_selected'];
+
+    $big_screenshot_selected = $_POST['big_screenshot_selected'];
+
+    $big_screenshot_path = $_POST['big_screenshot_path'];
+
+    
+
+    //check if a valid file was given for upload (thumbnail)
+
+    $upload_file = file_check_upload('media_screenshot');
+
+    if (!$upload_file) {
+
+      if (!($screenshot_selected) && $post_media_kind == 1) {
+
+        form_set_error('media_screenshot', t("You need to specify a valid thumbnail file to upload."));
+
+      }
+
+    }
+
+    else {
+
+      $dest = variable_get("upload_path","editor").'/'.$upload_file->filename;
+
+      if ($file = file_save_upload('media_screenshot', $dest, FALSE)){
+
+        $output = t("Thumbnail uploaded successfully <br>");
+
+        $screenshot_selected = file_create_url($dest);
+
+      }
+
+      else {
+
+        form_set_error('media_screenshot', t("Thumbnail upload failed. Please try again"));
+
+      }
+
+    }
+
+    if ($post_weight == 1) {
+
+    //verifing the validity of screenshot file given for upload.
+
+    $big_screenshot_upload_file = file_check_upload('big_screenshot_path');
+
+    if(!$big_screenshot_upload_file){
+
+        if (!($big_screenshot_selected) && $post_media_kind == 1) {
+
+        form_set_error('big_screenshot_path', t("You need to specify a valid screnshot file to upload."));
+
+      }
+
+    }else{
+
+        $dest = variable_get("upload_path","editor").'/'.$big_screenshot_upload_file->filename;
+
+        echo "I am here ".$dest;
+
+        if ($file = file_save_upload('big_screenshot_path', $dest, FALSE)){
+
+            $output = t("Screenshot uploaded successfully <br>");
+
+            $big_screenshot_selected = file_create_url($dest);
+
+        } else{
+
+            form_set_error('big_screenshot_path',t('Screenshot upload failed. Please try again'));
+
+        }
+
+    }
+
+    }
+
+
+
+    validate_form($media_kind, $media_url, $media_page_url, $media_title, $artist_name, $artist_url, $media_type, $media_format, $label1, $text1, $label2, $text2, $label3, $text3);
+
+
+
+    if (!form_get_errors()) {
+
+      insert_media($post_media_kind, $post_weight, $media_url, $media_page_url, $screenshot_selected, $media_title, $artist_name, $artist_url, $media_type, $media_format, $label1, $text1, $label2, $text2, $label3, $text3, $big_screenshot_selected);
+
+      $output .= t("The record was updated successfully<br>");
+
+      $output .= "Click ".l("Here", "homepage/edit")." to edit more items";
+
+         print theme('page', $output, t('Editor Page'));
+
+         return;
+
+     }
+
+  }
+
+
+
+  $object = fetch_item($media_kind, $weight);
+
+  if ($object) {
+
+    $big_screenshot_path = $object->screenshot_url; //big screenshot
+
+    $media_url = $object->media_url;
+
+    $screenshot_path  = $object->screenshot_path;	//thumbnail
+
+    $media_title = $object->media_title;
+
+    $media_page_url = $object->media_page_url;
+
+    $artist_name = $object->artist_name;
+
+    $artist_url  = $object->artist_url;
+
+    $media_type  = $object->media_type;
+
+    $media_format = $object->media_format;
+
+    $label1      = $object->label1;
+
+    $text1       = $object->text1;
+
+    $label2      = $object->label2;
+
+    $text2       = $object->text2;
+
+    $label3      = $object->label3;
+
+    $text3       = $object->text3;
+
+  }
+
+  $output = form_hidden('media_kind', $media_kind);
+
+  $output .= form_hidden('weight', $weight);
+
+  // if a selection already exists then set this field to indicate that
+
+  // selecting another file is not mandatory at this point
+
+  if ($screenshot_path) {
+
+    $output .= form_hidden('screenshot_selected', $screenshot_path);
+
+  }
+
+  if ($big_screenshot_path) {
+
+    $output .= form_hidden('big_screenshot_selected', $big_screenshot_path);
+
+  }
+
+  //one of the 10 featured videos
+
+  if ($media_kind == 1) {
+
+    $rows = array();
+
+    $rows[] = array(array('data' => form_textfield("Enter URL for Media $weight", "media_url",$media_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    //if it is Media 1 the display a field for large screenshot .
+
+    if($weight == 1){
+
+        $cur_big_screenshot_text =($big_screenshot_path)? '(Current selection is: <a href="'.$big_screenshot_path.'">'.$big_screenshot_path.'</a>)': '';
+
+        $rows[] = array(array('data' => form_file("Screenshot file ".$cur_big_screenshot_text, "big_screenshot_path", 70, NULL, true), 'colspan' => 2));
+
+    }
+
+    $cur_thumb_text = ($screenshot_path)? "(Current Selection is <a href=\"$screenshot_path\">$screenshot_path</a>)": '';
+
+    $rows[] = array(array('data' => form_file("Thumbnail file ". $cur_thumb_text, 'media_screenshot', 70, "", false), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Media Title", "media_title", $media_title, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Artist Name", "artist_name", $artist_name, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Artist Member Page URL", "artist_url", $artist_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Media Page URL", "media_page_url", $media_page_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_select("Media Type", "media_type", $media_type, fetch_labels(), NULL, 0, FALSE, TRUE), 'colspan' => 2));
+
+
+
+    //custom fields
+
+    for ($j = 1; $j <= 3; $j++) {
+
+      $customrow = array();
+
+      eval("\$label = \$label".$j.";");
+
+      eval("\$text = \$text".$j.";");
+
+      $customrow[] = form_textfield("Label for Custom Field $j", "media_custom_".$j, $label , 15, 15, "", NULL, true);
+
+      $customrow[] = form_textfield("Text for Custom Field $j", "media_text_".$j,$text, 15, 15, "", NULL, true);
+
+      array_push($rows, $customrow);
+
+    }
+
+    $output .= theme('table', '' , $rows);
+
+  }
+
+  else if ($media_kind == 2) { // music media
+
+    $rows = array();
+
+    $rows[] = array(array('data' => form_textfield("Enter URL for Music Media $weight", "media_url", $media_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Media Title", "media_title", $media_title, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Author", "artist_name", $artist_name, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Media Page URL", "media_page_url", $media_page_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Format", "media_format",$media_format, 15, 15, "", NULL, true), 'colspan' => 2));
+
+
+
+    $output .= theme('table', '', $rows);
+
+  }
+
+  else if ($media_kind == 3)     //audio media
+
+  {
+
+    $rows = array();
+
+    $rows[] = array(array('data' => form_textfield("Enter URL for Audio Media $weight", "media_url", $media_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Audio Media Title", "media_title", $media_title, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Music Media Page URL", "media_page_url", $media_page_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Format", "media_format",$media_format, 15, 15, "", NULL, true), 'colspan' => 2));
+
+    //custom fields
+
+    for ($j = 1; $j <= 1; $j++) {
+
+      eval("\$label = \$label".$j.";");
+
+      eval("\$text = \$text".$j.";");
+
+      $customrow = array();
+
+      $customrow[] = form_textfield("Label for Custom Field $j", "media_custom_".$j, $label, 15, 15, "", NULL, true);
+
+      $customrow[] = form_textfield("Text for Custom Field $j", "media_text_".$j, $text, 15, 15, "", NULL, true);
+
+      array_push($rows, $customrow);
+
+    }
+
+    $output .= theme('table', '', $rows);
+
+  }
+
+  else if ($media_kind == 4) { //text media
+
+    $rows = array();
+
+    $rows[] = array(array('data' => form_textfield("Enter URL for Text Media $weight", "media_url", $media_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Text Media Title", "media_title", $media_title, 21, 21, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Text Media Page URL", "media_page_url", $media_page_url, 70, 255, "", NULL, true), 'colspan' => 2));
+
+    $rows[] = array(array('data' => form_textfield("Format", "media_format", $media_format, 15, 15, "", NULL, true), 'colspan' => 2));
+
+    //custom fields
+
+    for ($j = 1; $j <= 1; $j++) {
+
+      eval("\$label = \$label".$j.";");
+
+      eval("\$text = \$text".$j.";");
+
+      $customrow = array();
+
+      $customrow[] = form_textfield("Label for Custom Field $j", "media_custom_".$j, $label, 15, 15, "", NULL, true);
+
+      $customrow[] = form_textfield("Text for Custom Field $j", "media_text_".$j, $text, 15, 15, "", NULL, true);
+
+      array_push($rows, $customrow);
+
+    }
+
+    $output .= theme('table', $i, $rows);
+
+  }
+
+
+
+  $output .= form_submit("Submit");
+
+  $output = form($output, 'post', '',array('enctype' => 'multipart/form-data'));
+
+  print theme('page', $output, "Editor Page");
+
+}
+
+
+
+/**
+
+ * prints the themed main editor page
+
+ */
+
+function print_main_page() {
+
+  //main media items
+
+  for ($i = 1; $i <= 14; $i++) {
+
+    $main_media .= l("Edit Item $i", "homepage/edit/1/".$i)."<br>";
+
+  }
+
+  $output = theme('box', "Main Media Items", $main_media);
+
+
+
+  //music media items
+
+  for ($i = 1; $i <= 4; $i++) {
+
+    $music .= l("Edit Item $i", "homepage/edit/2/".$i)."<br>";
+
+  }
+
+  $output .= theme('box', "Music Media Items", $music);
+
+
+
+  //audio media items
+
+  for ($i = 1; $i <= 4; $i++) {
+
+    $audio .= l("Edit Item $i", "homepage/edit/3/".$i)."<br>";
+
+  }
+
+  $output .= theme('box', "Audio Media Items", $audio);
+
+
+
+  //text media items
+
+  for ($i = 1; $i <= 4; $i++) {
+
+    $text .= l("Edit Item $i", "homepage/edit/4/".$i)."<br>";
+
+  }
+
+  $output .= theme('box', "Text Media Items", $text);
+
+
+
+  print theme('page', $output, "Editor Page");
+
+}
+
+
+
+/**
+
+ * Validate the form input and set error messages in case of invalid input
+
+ */
+
+function validate_form($media_kind, $media_url, $media_page_url, $media_title, $artist_name, $artist_url, $media_type, $media_format, $label1, $text1, $label2, $text2, $label3, $text3){
+
+  if ($media_kind == 1) {
+
+    if (!$media_url) {
+
+      form_set_error('media_url', 'Media URL can not be empty');
+
+    }
+
+    if (!$media_title) {
+
+      form_set_error('media_title', 'Media title can not be empty');
+
+    }
+
+    if (!$artist_name) {
+
+      form_set_error('artist_name', 'Artist name can not be empty');
+
+    }
+
+    if (!$artist_url) {
+
+      form_set_error('artist_url', 'Artist URL can not be empty');
+
+    }
+
+    if (!$media_page_url) {
+
+      form_set_error('media_page_url', 'Media page URL can not be empty');
+
+    }
+
+    if (!$label1) {
+
+      form_set_error('label1', 'Custom field can not be empty');
+
+    }
+
+    if (!$text1) {
+
+      form_set_error('text1', 'Custom field can not be empty');
+
+    }
+
+    if (!$label2) {
+
+      form_set_error('label2', 'Custom field can not be empty');
+
+    }
+
+    if (!$text2) {
+
+      form_set_error('text2', 'Custom field can not be empty');
+
+    }
+
+    if (!$label3) {
+
+      form_set_error('label3', 'Custom field can not be empty');
+
+    }
+
+    if (!$text3) {
+
+      form_set_error('text3', 'Custom field can not be empty');
+
+    }
+
+  }
+
+  else if ($media_kind == 2) {
+
+    if (!$media_url) {
+
+      form_set_error('media_url', 'Media URL can not be empty');
+
+    }
+
+    if (!$media_title) {
+
+      form_set_error('media_title', 'Media title can not be empty');
+
+    }
+
+    if (!$artist_name) {
+
+      form_set_error('artist_name', 'Artist name can not be empty');
+
+    }
+
+    if (!$media_page_url) {
+
+      form_set_error('media_page_url', 'Media page URL can not be empty');
+
+    }
+
+    if (!$media_format) {
+
+      form_set_error('media_format', 'Media format can not be empty');
+
+    }
+
+  }
+
+  else if ($media_kind == 3 || $media_kind ==4) {
+
+    if (!$media_url) {
+
+      form_set_error('media_url', 'Media URL can not be empty');
+
+    }
+
+    if (!$media_title) {
+
+      form_set_error('media_title', 'Media title can not be empty');
+
+    }
+
+    if (!$media_page_url) {
+
+      form_set_error('media_page_url', 'Media page URL can not be empty');
+
+    }
+
+    if (!$media_format) {
+
+      form_set_error('media_format', 'Media format can not be empty');
+
+    }
+
+    if (!$label1) {
+
+      form_set_error('label1', 'Custom field can not be empty');
+
+    }
+
+    if (!$text1) {
+
+      form_set_error('text1', 'Custom field can not be empty');
+
+    }
+
+  }
+
+}
+
+
+
+/**
+
+ * fetch the labels to display in the media type drop-down
+
+ */
+
+function fetch_labels() {
+
+  return array(
+
+    'VIDEO' => 'VIDEO',
+
+    'ANIMATION' => 'ANIMATION',
+
+    'BLOG VIDEO' => 'BLOG VIDEO',
+
+    'COMMENTARY' => 'COMMENTARY',
+
+    'MUSIC VIDEO' => 'MUSIC VIDEO',
+
+    'CONCERT VIDEO' => 'CONCERT VIDEO',
+
+    'DIGITAL STORY' => 'DIGITAL STORY',
+
+    'DOCUMENTARY' => 'DOCUMENTARY',
+
+    'HOME VIDEO' => 'HOME VIDEO',
+
+    'FEATURE FILM' => 'FEATURE FILM',
+
+    'NEWS REPORT' => 'NEWS REPORT',
+
+    'NEWS FOOTAGE' => 'NEWS FOOTAGE',
+
+    'REAL LIFE' => 'REAL LIFE',
+
+    'ADVERTISING' => 'ADVERTISING',
+
+    'AUDIO' => 'AUDIO',
+
+    'MUSIC' => 'MUSIC',
+
+    'INTERVIEWS' => 'INTERVIEWS',
+
+    'SPEECH' => 'SPEECH',
+
+    'ORAL HISTORY' => 'ORAL HISTORY',
+
+    'MASH-UP' => 'MASH-UP',
+
+    'SOUND' => 'SOUND',
+
+    'SAMPLES' => 'SAMPLES',
+
+    'READINGS' => 'READINGS',
+
+    'RECORDING' => 'RECORDING',
+
+    'ARTWORK' => 'ARTWORK',
+
+    'DRAWINGS' => 'DRAWINGS',
+
+    'CARTOON' => 'CARTOON',
+
+    'NATURE PHOTOS' => 'NATURE PHOTOS',
+
+    'LANDSCAPES' => 'LANDSCAPES',
+
+    'CANDID PHOTOS' => 'CANDID PHOTOS',
+
+    'PHOTOGRAPHY' => 'PHOTOGRAPHY',
+
+    'PHOTO GALLERY' => 'PHOTO GALLERY',
+
+    'COMPUTER GAME' => 'COMPUTER GAME',
+
+    'SOFTWARE' => 'SOFTWARE',
+
+    'TEXT' => 'TEXT',
+
+    'BOOK' => 'BOOK',
+
+    'NOVEL' => 'NOVEL',
+
+    'STORY' => 'STORY'
+
+  );
+
+}
+
+
+
+/**
+
+ * Inserts the input media information into the database.
+
+ */
+
+function insert_media($media_kind, $weight, $media_url, $media_page_url, $screenshot_path, $media_title, $artist_name, $artist_url, $media_type, $media_format, $label1, $text1, $label2, $text2, $label3, $text3,$big_screenshot_selected) {            
+
+  db_query("DELETE FROM {editorselections} WHERE media_kind='%d' AND weight='%d'", $media_kind, $weight);
+
+  db_query("INSERT INTO {editorselections} (media_kind, weight, media_url, media_page_url, screenshot_path, media_title,artist_name, artist_url, media_type, media_format, label1, text1, label2, text2, label3, text3, screenshot_url) VALUES ('%d', '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s','%s')", $media_kind, $weight, strip_tags($media_url), strip_tags($media_page_url), strip_tags($screenshot_path), strip_tags($media_title), strip_tags($artist_name), strip_tags($artist_url), strip_tags($media_type), strip_tags($media_format), strip_tags($label1), strip_tags($text1), strip_tags($label2), strip_tags($text2), strip_tags($label3), strip_tags($text3), strip_tags($big_screenshot_selected) );
+
+}
+
+
+
+/**
+
+ * fetches the media item from the database
+
+ */
+
+function fetch_item($media_kind, $weight) {
+
+  if ($result = db_query("SELECT * FROM {editorselections} WHERE media_kind='%d' AND weight='%d'", $media_kind, $weight)) {
+
+    return db_fetch_object($result);
+
+  }
+
+  else {
+
+    return NULL;
+
+  }
+
+}
+
+
+
+/**
+
+ * Implementation of hook_link().
+
+ */
+
+function homepage_link($type, $node = 0, $main) {
+
+  $links = array();
+
+
+
+  if ($type == 'page' && user_access('edit content')) {
+
+    $links[] = l(t('edit homepage'), 'homepage/edit', array('title' => t('Edit the homepage media entries.')));
+
+  }
+
+  
+
+  return $links;
+
+}
+
+
+
+?>

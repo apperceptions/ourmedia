@@ -1,0 +1,28 @@
+-- 
+-- Table structure for table `copyright_node`
+-- 
+
+CREATE TABLE `copyright_node` (
+  `nid` int(10) unsigned NOT NULL default '0',
+  `cpyid` int(10) unsigned NOT NULL default '0',
+  `children_show_notice` tinyint(1) NOT NULL default '1',
+  PRIMARY KEY  (`nid`)
+) TYPE=MyISAM;
+
+-- --------------------------------------------------------
+
+-- 
+-- Table structure for table `copyrights`
+-- 
+
+CREATE TABLE `copyrights` (
+  `cpyid` int(10) unsigned NOT NULL default '0',
+  `name` varchar(60) NOT NULL default '',
+  `description` varchar(255) default NULL,
+  `site_notice` longtext NOT NULL,
+  `node_notice` longtext NOT NULL,
+  `image_url` varchar(255) default NULL,
+  `source_url` varchar(255) default NULL,
+  `license` longtext,
+  PRIMARY KEY  (`cpyid`)
+) TYPE=MyISAM;

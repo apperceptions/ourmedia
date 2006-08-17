@@ -1,0 +1,23 @@
+#
+# Table structure for table `imagemedia`
+#
+
+DROP TABLE IF EXISTS imagemedia;
+CREATE TABLE imagemedia (
+  nid int(10) NOT NULL default '0',
+  image_fileid int(10) default NULL,
+  file_size varchar(255) default NULL,
+  image_resolution varchar(255) default NULL,
+  image_gps_coordinates varchar(255) default NULL,
+  image_film_type varchar(255) default NULL,
+  camera_model varchar(255) default NULL,
+  image_bit_depth varchar(255) default NULL,
+  image_school varchar(255) default NULL,
+  image_medium varchar(255) default NULL,
+  camera_aperture varchar(255) default NULL,
+  camera_shutter_speed varchar(255) default NULL,
+  camera_iso_equivalent varchar(255) default NULL,
+  camera_focal_length varchar(255) default NULL,
+  image_is_digital tinyint(1) default '0',
+  image_flash_used tinyint(1) default '0'
+) TYPE=MyISAM;

@@ -1,0 +1,60 @@
+<?php
+// $Id: taxonomy_multi_edit.module,v 1.10.2.1 2005/04/15 18:56:50 weitzman Exp $
+
+function taxonomy_multi_edit_help($section = "admin/help#taxonomy_multi_edit") {
+  $output = "";
+  switch ($section) {
+    case 'admin/modules#description':
+      $output = t("Apply multiple category assignments at once.");
+      break;
+    case 'admin/node/taxonomy_multi_edit':
+      return t('Attach  categories to your posts, and then click the <b>Submit</b> button.');
+  }
+  return $output;
+}
+
+function taxonomy_multi_edit_menu($may_cache) {
+  if ($may_cache) {
+    $items[] = array('path' => 'admin/node/taxonomy_multi_edit', 'title' => t('assign categories'),
+    'callback' => 'taxonomy_multi_edit_overview',
+    'access' => user_access('administer nodes'),
+    'weight' => 5,
+    'type' => MENU_LOCAL_TASK);
+    return $items;
+  }
+}
+
+function taxonomy_multi_edit_overview() {
+  if ($edit = $_POST['edit']) {
+    foreach ($edit as $nid => $terms) {
+      if (!$tax = $terms['taxonomy']) {
+        $tax = $terms['tags'];
+      }
+      taxonomy_node_save($nid, $tax);
+    }
+    drupal_set_message(t('categories updated.'));
+  }
+
+  $numselects = 4;
+  $header = array(
+    array("data" => t('title'), ),
+    array("data" => t("vocabularies"), "colspan" => $numselects)
+  );
+  $sql = "SELECT n.nid, title, teaser, type FROM {node} n ORDER BY changed DESC";
+  $result = pager_query(db_rewrite_sql($sql), 200);
+  while ($node = db_fetch_object($result)) {
+    if ($selects = taxonomy_node_form($node->type, $node, NULL, "$node->nid][taxonomy")) {
+      $selects = array_pad($selects, $numselects, '&nbsp;');
+      array_unshift($selects, l($node->title, "node/$node->nid", array('title' => substr(strip_tags($node->teaser), 0, 80))));
+      $rows[] = $selects;
+    }
+  }
+  $form = theme('table', $header, $rows);
+  $form .= form_button('Submit');
+  if ($pager = theme("pager", NULL, 200, 0, tablesort_pager())) {
+    $form .= array(array("data" => $pager, "colspan" => $numselects+1));
+  }
+  print theme('page', form($form));
+}
+
+?>

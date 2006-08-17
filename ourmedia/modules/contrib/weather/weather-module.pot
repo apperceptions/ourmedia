@@ -1,0 +1,233 @@
+# LANGUAGE translation of Drupal (weather.module)
+# Copyright YEAR NAME <EMAIL@ADDRESS>
+# $Id: weather-module.pot,v 1.2 2004/10/24 01:14:00 gerardryan Exp $
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"POT-Creation-Date: 2004-10-23 18:18-0700\n"
+"PO-Revision-Date: YYYY-mm-DD HH:MM+ZZZZ\n"
+"Last-Translator: NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <EMAIL@ADDRESS>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: test.module:5
+msgid "Feeds off weatherroom.com xml services and outputs to a block."
+msgstr ""
+
+#: test.module:10
+msgid "Imperial"
+msgstr ""
+
+#: test.module:10
+msgid "Metric"
+msgstr ""
+
+#: test.module:10
+msgid "Both"
+msgstr ""
+
+#: test.module:11
+msgid "Enter a zip code or a ICAO (International Civil Aviation Organization) 4-letter airport indentifier code"
+msgstr ""
+
+#: test.module:11
+msgid "This can be a zip code, or a 4-letter, ICAO code (e.g. CYWH, for Victoria, BC). Alternatively, you can view"
+msgstr ""
+
+#: test.module:11
+msgid "this page"
+msgstr ""
+
+#: test.module:11
+msgid "for \"City_Name.State\" and other naming variations. You can obtain international codes at"
+msgstr ""
+
+#: test.module:11
+msgid "or"
+msgstr ""
+
+#: test.module:12
+msgid "Regional Codes"
+msgstr ""
+
+#: test.module:14
+msgid "Display units in imperial, metric, or both"
+msgstr ""
+
+#: test.module:14
+msgid "Select a default scale."
+msgstr ""
+
+#: test.module:15
+msgid "Show mini-block"
+msgstr ""
+
+#: test.module:15
+msgid "Displays only temperature, wind, and a \"current conditions\" graphic provided by weatherroom.com."
+msgstr ""
+
+#: test.module:16
+msgid "Show extended forecast"
+msgstr ""
+
+#: test.module:16
+msgid "5 day forecasts, displayed on a separate page."
+msgstr ""
+
+#: test.module:17
+msgid "Show XML feed"
+msgstr ""
+
+#: test.module:17
+msgid "Provides a link to the local XML weatherfeed, as received from weatherroom.com."
+msgstr ""
+
+#: test.module:18
+msgid "Display Options"
+msgstr ""
+
+#: test.module:20
+msgid "Menu entry for extended forecast"
+msgstr ""
+
+#: test.module:20
+msgid "Adds a forecast link to the user menu."
+msgstr ""
+
+#: test.module:21
+msgid "Block re-caching"
+msgstr ""
+
+#: test.module:21
+msgid "Updates weather block in cached pages for anonymous users"
+msgstr ""
+
+#: test.module:22
+msgid "Enable cron"
+msgstr ""
+
+#: test.module:22
+msgid "Auto-parsed weather data using drupal's cron system"
+msgstr ""
+
+#: test.module:23
+msgid "Extra Options"
+msgstr ""
+
+#: test.module:30;33
+msgid "Weather report"
+msgstr ""
+
+#: test.module:42
+msgid "weather forecast"
+msgstr ""
+
+#: test.module:43
+msgid "xml feed"
+msgstr ""
+
+#: test.module:62
+msgid "Home"
+msgstr ""
+
+#: test.module:63
+msgid "weather"
+msgstr ""
+
+#: test.module:66
+msgid "Extended forecast"
+msgstr ""
+
+#: test.module:72
+msgid "The XML feed is unavailable."
+msgstr ""
+
+#: test.module:341
+msgid "This feature has been disabled by the administrator."
+msgstr ""
+
+#: test.module:347
+msgid "The forecast is unavailable. Please refresh or try again later."
+msgstr ""
+
+#: test.module:349
+msgid "5 day forecast for"
+msgstr ""
+
+#: test.module:362
+msgid "High"
+msgstr ""
+
+#: test.module:366
+msgid "Low"
+msgstr ""
+
+#: test.module:370;407
+msgid "Last Updated"
+msgstr ""
+
+#: test.module:374;461
+msgid "Powered by"
+msgstr ""
+
+#: test.module:401
+msgid "The weather report is unavailable. Please refresh or try again later."
+msgstr ""
+
+#: test.module:405
+msgid "Temperature"
+msgstr ""
+
+#: test.module:406
+msgid "Wind"
+msgstr ""
+
+#: test.module:412
+msgid "Current weather for"
+msgstr ""
+
+#: test.module:412
+msgid "Current weather conditions for"
+msgstr ""
+
+#: test.module:419;425;430;440;445
+msgid "N/A"
+msgstr ""
+
+#: test.module:425;427
+msgid "Feels like"
+msgstr ""
+
+#: test.module:430;432
+msgid "Relative Humidity"
+msgstr ""
+
+#: test.module:435;437
+msgid "Visibility"
+msgstr ""
+
+#: test.module:435
+msgid "unlimited"
+msgstr ""
+
+#: test.module:440;442
+msgid "Pressure"
+msgstr ""
+
+#: test.module:445;447
+msgid "Dew Point"
+msgstr ""
+
+#: test.module:457
+msgid "View the"
+msgstr ""
+
+#: test.module:457
+msgid "5 day forecast"
+msgstr ""
+

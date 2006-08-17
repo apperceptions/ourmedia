@@ -1,0 +1,12 @@
+SXIP module installation
+-------------------------
+
+1.) Download and install the SXIP PHP MDK from https://sxip.org/files/mdk/php/
+    (the "simple" MDK is sufficient, but the full is recommended)
+
+2.) Copy sxip.module and the images directory to your modules directory
+
+3.) Enable the module at ?q=admin/modules
+
+4.) Enable the sxip in/ sxip out block at ?q=admin/block
+

@@ -1,0 +1,55 @@
+#
+# This patch can be applied to a clean 4.5 installation to integrate banners
+# into the default xtemplate themes.  Use this patch as an example, customizing
+# as you need for your site.
+#
+# Updates both 'bluemarine' and 'pushbutton'.
+#
+
+--- themes/engines/xtemplate/xtemplate.engine.orig	2004-10-30 15:19:01.705134320 -0400
++++ themes/engines/xtemplate/xtemplate.engine	2004-10-30 15:33:53.415534077 -0400
+@@ -139,6 +139,11 @@
+     $xtemplate->template->parse('header.site_name');
+   }
+ 
++  if (function_exists('banner_display')) {
++    $xtemplate->template->assign('banner', banner_display());
++    $xtemplate->template->parse('header.banner');
++  }
++
+   if (theme_get_setting('toggle_slogan')) {
+     $xtemplate->template->assign('site_slogan', variable_get('site_slogan', ''));
+     $xtemplate->template->parse('header.site_slogan');
+--- themes/bluemarine/xtemplate.xtmpl.orig	2004-10-30 15:23:50.150595629 -0400
++++ themes/bluemarine/xtemplate.xtmpl	2004-10-30 15:26:58.628744139 -0400
+@@ -28,6 +28,13 @@
+ 
+ 
+     </td>
++    <td id="banner">
++
++      <!-- BEGIN: banner-->
++      <div id="banner">{banner}</div>
++      <!-- END: banner-->
++
++    </td>
+     <td id="menu">
+       <div id="secondary">{secondary_links}</div>
+       <div id="primary">{primary_links}</div>
+--- themes/pushbutton/xtemplate.xtmpl.orig	2004-10-30 15:27:24.299610662 -0400
++++ themes/pushbutton/xtemplate.xtmpl	2004-10-30 15:28:28.467056372 -0400
+@@ -33,6 +33,14 @@
+ 
+     </td>
+ 
++    <td id="banner">
++
++      <!-- BEGIN: banner-->
++      <div id="banner">{banner}</div>
++      <!-- END: banner-->
++
++    </td>
++
+     <td class="primary-links" width="70%" align="center" valign="middle">
+ 
+       {primary_links}

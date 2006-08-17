@@ -1,0 +1,507 @@
+<?php
+// $Id: foaf.module,v 1.6.2.2 2005/06/14 22:36:17 walkah Exp $
+
+/**
+ * Implements hook_help
+ */
+function foaf_help($section) {
+  switch ($section) {
+    case 'admin/modules#description':
+      return t('Allows <acronym title="Friend of a Friend">FOAF</acronym> import / export');
+    case 'admin/help#foaf':
+      return t('
+               <p>FOAF, or "Friend of a Friend," refers to a set of "social networking" standards and tools for online sharing and searching of user profile information.   Users will find this useful if they want to make a list of their friends and be able to export or import their list among social networking applications.</p>
+               <p>The FOAF module allows users to export FOAF documents based on their profile information. It also allows users to import profile information from external FOAF files, and even includes an option to let profiles auto sync when using distributed authentication.  The FOAF module can export your buddy list if the buddy list module is enabled.   You can download FOAF files in the view tab of a user profile if FOAF is enabled.</p>
+               <p>You can</p>
+               <ul>
+                 <li>read the <a href = "http://en.wikipedia.org/wiki/FOAF" title = "FOAF wikipedia explanation">FOAF wikipedia explanation</a>.</li>
+                 <li>read the <a href = "http://www.socialtext.net/foafnet/index.cgi?basic_specs" title = "FOAFNet specification">FOAFNet specificiation</a>.</li>
+                 <li>view <a href = " http://test.bryght.com/FOAF" title = " FOAF module example 2">FOAF module example</a>.</li>
+                 <li>view <a href = "%userprofiles" title = "user profiles"> user profiles</a> and select a user to see their FOAF file.</li>
+                 <li>enable the buddy list module at <a href = "%administermodules" title = "administer modules"> administrator >> modules</a>.</li>
+               </ul>
+               <p>For more information, read the configuration and customization handbook <a href="http://drupal.org/handbook/modules/Foaf" title="Foaf page"> Foaf page</a></p>', 
+               array('%userprofiles' => url('/profile'), '%administermodules' => url('/admin/modules'))
+             );
+  }
+}
+
+/**
+ * Implementation of hook_menu
+ */
+function foaf_menu($may_cache) {
+  global $user;
+  
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'foaf', 'title' => t('foaf'),
+                     'access' => user_access('access content'),
+                     'callback' => 'foaf_export',
+                     'type' => MENU_CALLBACK);
+  }
+  return $items;
+}
+
+/**
+ * Implements hook_user
+ */
+function foaf_user($op, &$edit, &$user, $category = NULL) {
+  switch ($op) {
+    case 'login':
+      return foaf_login($user);
+    case 'validate':
+      if ($edit['foaf_url']) {
+        $user->foaf_url = $edit['foaf_url'];
+        return foaf_import($user);
+      }
+      break;
+    case 'view':
+      drupal_set_html_head("\n".'<link rel="meta" type="application/rdf+xml" title="FOAF" href="'.url('foaf/'.$user->uid, NULL, NULL, TRUE).'" />');
+      $output = '';
+      if (_foaf_allow_export($user)) {
+        return array(t('Personal Information') => l(t('Download <acronym title="Friend of a Friend">FOAF</acronym>'), 'foaf/'.$user->uid, NULL, NULL, NULL, FALSE, TRUE));
+      }
+      break;
+    case 'form':
+      if ($category == 'account') {
+        return foaf_user_form($user);
+      }
+      break;
+  }
+}
+
+function foaf_settings() {
+  $output = '';
+
+  $output.= form_radios(t('Export <acronym title="Friend of a Friend">FOAF</acronym> for users by default'), 'foaf_export_default', variable_get('foaf_export_default', 0), array(0 => t('no'), 1=> t('yes')), t('This can be overridden by individual users'));
+  
+  $mapping.= form_select(t('Field for foaf:name'), 'foaf_name', variable_get('foaf_name', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:title'), 'foaf_title', variable_get('foaf_title', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:firstName'), 'foaf_firstName', variable_get('foaf_firstName', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:surname'), 'foaf_surname', variable_get('foaf_surname', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:Organization'), 'foaf_Organization', variable_get('foaf_Organization', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:phone'), 'foaf_phone', variable_get('foaf_phone', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:aimChatID'), 'foaf_aimChatID', variable_get('foaf_aimChatID', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:icqChatID'), 'foaf_icqChatID', variable_get('foaf_icqChatID', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:msnChatID'), 'foaf_msnChatID', variable_get('foaf_msnChatID', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:yahooChatID'), 'foaf_yahooChatID', variable_get('foaf_yahooChatID', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:jabberID'), 'foaf_jabberID', variable_get('foaf_jabberID', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for foaf:workplaceHomepage'), 'foaf_workplaceHomepage', variable_get('foaf_workplaceHomepage', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for vCard:Street'), 'foaf_street', variable_get('foaf_street', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for vCard:Locality'), 'foaf_locality', variable_get('foaf_locality', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for vCard:Region'), 'foaf_region', variable_get('foaf_region', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for vCard:Pcode'), 'foaf_pcode', variable_get('foaf_pcode', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for vCard:Country'), 'foaf_country', variable_get('foaf_country', ''), _foaf_profile_fields());
+  $mapping.= form_select(t('Field for bio:keywords'), 'foaf_keywords', variable_get('foaf_keywords', ''), _foaf_profile_fields());
+
+  $output.= form_group(t('Field Mappings'), $mapping);
+  return $output;
+}
+
+function foaf_xmlrpc() {
+  return array('foaf.getUrl' => array('function' => 'foaf_get_url'));
+}
+
+function foaf_export($uid = null) {
+  if (!$uid || !$account = user_load(array('uid' => $uid))) {
+    drupal_not_found();
+    return;
+  }
+
+  if ( !_foaf_allow_export($account)) {
+    drupal_access_denied();
+    return;
+  }
+
+  $output .= '<?xml version="1.0" encoding="iso-8859-1" ?>'."\n";
+  $output .= '<!-- generator="Drupal FOAF.Module" -->'."\n";
+  $output .= '<rdf:RDF xmlns="http://xmlns.com/foaf/0.1"'."\n";
+  $output .= '  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"'."\n";
+  $output .= '  xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"'."\n";
+  $output .= '  xmlns:dc="http://purl.org/dc/elements/1.1/"'."\n";
+  $output .= '  xmlns:admin="http://webns.net/mvcb/"'. "\n";
+  $output .= '  xmlns:bio="http://purl.org/vocab/bio/0.1/"'."\n";
+  $output .= '  xmlns:foaf="http://xmlns.com/foaf/0.1/"'."\n";
+  $output .= '  xmlns:vCard="http://www.w3.org/2001/vcard-rdf/3.0#">'."\n";
+
+  // foaf:PersonalProfileDocument
+  $output .= '<foaf:PersonalProfileDocument rdf:about="">' ."\n";
+  $output .= '  <foaf:maker rdf:nodeID="_'.$uid.'" />'."\n"; 
+  $output .= '  <foaf:primaryTopic rdf:nodeID="_'.$uid.'" />'."\n";
+  $output .= '  <dc:title>'. t('FOAF for %name at %site', array('%name' => $account->name, '%site' => variable_get('site_name', 'drupal'))) ."</dc:title>\n";
+  $output .= '  <dc:description>' . t('Friend of a Friend description for %name', array('%name' => $account->name)) . "</dc:description>\n";
+  $output .= '  <admin:generatorAgent rdf:resource="http://www.drupal.org/" />'."\n";
+  $output .= "</foaf:PersonalProfileDocument>\n";
+
+  //$name = ($val = _foaf_profile_get($uid, variable_get('foaf_name',''))) ? $val : $account->name;
+  $picture = ($account->picture) ? file_create_url($account->picture) : '';
+
+  // foaf:Person
+  $output.= '<foaf:Person rdf:nodeID="_'.$uid.'">'."\n";
+  if ($firstName = _foaf_profile_get($uid, variable_get('foaf_firstName',''))) {
+    $output.= '  <foaf:firstName>'.$firstName."</foaf:firstName>\n";
+  }
+  if ($surname = _foaf_profile_get($uid, variable_get('foaf_surname',''))) {
+    $output.= '  <foaf:surname>'.$surname."</foaf:surname>\n";
+  }
+
+  // Guess foaf:name (if not present)
+  if (!$name = _foaf_profile_get($uid, variable_get('foaf_name',''))) {
+    if ($firstName && $surname) {
+      $name = $firstName . ' ' . $surname;
+    }
+    else {
+      $name = $account->name;
+    }
+  }
+  $output.= '  <foaf:name>'.$name."</foaf:name>\n";
+  if ($account->mail) {
+    $output.= '  <foaf:mbox_sha1sum>'.sha1('mailto:' . $account->mail)."</foaf:mbox_sha1sum>\n";
+  }
+  if ($picture) {
+    $output.= '  <foaf:img rdf:resource="'.$picture.'" />' . "\n";
+    $output.= '  <foaf:depiction rdf:resource="'.$picture.'" />' . "\n";
+  }
+  $output.= '  <foaf:nick>'.$account->name ."</foaf:nick>\n";
+
+  // weblog
+  if (module_exist('blog')) {
+    $output.= '  <foaf:weblog rdf:resource="'.url('blog/'.$uid, null, null, true) . '" />' . "\n";
+  }
+
+  if ($title = _foaf_profile_get($uid, variable_get('foaf_title',''))) {
+    $output.= '  <foaf:title>'.$title."</foaf:title>\n";
+  }
+  if ($Organization = _foaf_profile_get($uid, variable_get('foaf_Organization',''))) {
+    $output.= '  <foaf:Organization>'.$Organization."</foaf:Organization>\n";
+  }
+  if ($phone = _foaf_profile_get($uid, variable_get('foaf_phone',''))) {
+    $output.= '  <foaf:phone rdf:resource="'.$phone.'"/>'."\n";
+  }
+  if ($aimChatID = _foaf_profile_get($uid, variable_get('foaf_aimChatID',''))) {
+    $output.= '  <foaf:aimChatID>'.$aimChatID."</foaf:aimChatID>\n";
+  }
+  if ($icqChatID = _foaf_profile_get($uid, variable_get('foaf_icqChatID',''))) {
+    $output.= '  <foaf:icqChatID>'.$icqChatID."</foaf:icqChatID>\n";
+  }
+  if ($msnChatID = _foaf_profile_get($uid, variable_get('foaf_msnChatID',''))) {
+    $output.= '  <foaf:msnChatID>'.$msnChatID."</foaf:msnChatID>\n";
+  }
+  if ($yahooChatID = _foaf_profile_get($uid, variable_get('foaf_yahooChatID',''))) {
+    $output.= '  <foaf:yahooChatID>'.$yahooChatID."</foaf:yahooChatID>\n";
+  }
+  if ($jabberID = _foaf_profile_get($uid, variable_get('foaf_jabberID',''))) {
+    $output.= '  <foaf:jabberID>'.$jabberID."</foaf:jabberID>\n";
+  }
+  if ($workplaceHomepage = _foaf_profile_get($uid, variable_get('foaf_workplaceHomepage',''))) {
+    $output.= '  <foaf:workplaceHomepage rdf:resource="'.htmlentities($workplaceHomepage).'" />'."\n";
+  }
+
+  $address = '';
+  if ($street = _foaf_profile_get($uid, variable_get('foaf_street',''))) {
+    $address.= '    <vCard:Street>'.$street."</vCard:Street>\n";
+  }
+  if ($locality = _foaf_profile_get($uid, variable_get('foaf_locality',''))) {
+    $address.= '    <vCard:Locality>'.$locality."</vCard:Locality>\n";
+  }
+  if ($region = _foaf_profile_get($uid, variable_get('foaf_region',''))) {
+    $address.= '    <vCard:Region>'.$region."</vCard:Region>\n";
+  }
+  if ($pcode = _foaf_profile_get($uid, variable_get('foaf_pcode',''))) {
+    $address.= '    <vCard:Pcode>'.$pcode."</vCard:Pcode>\n";
+  }
+  if ($country = _foaf_profile_get($uid, variable_get('foaf_country',''))) {
+    $address.= '    <vCard:Country>'.$country."</vCard:Country>\n";
+  }
+
+  if ($address) {
+    $output.= '  <vCard:ADR rdf:parseType="Resource">'."\n";
+    $output.= $address;
+    $output.= "  </vCard:ADR>\n";
+  }
+
+  if ($keywords = _foaf_profile_get($uid, variable_get('foaf_keywords', ''))) {
+    $output .= '  <bio:keywords>'.$keywords."</bio:keywords>\n";
+  }
+
+  if (function_exists('buddylist_get_buddies')) {
+    $buddies = buddylist_get_buddies($uid);   
+    foreach ($buddies as $buddy) {
+      $output .= "  <foaf:knows>\n";
+      $output .= "    <foaf:Person>\n";
+      $output .= "      <foaf:name>".$buddy->name."</foaf:name>\n";
+      if ($buddy->mail) {
+        $output .= '      <foaf:mbox_sha1sum>'.sha1('mailto:' . $buddy->mail)."</foaf:mbox_sha1sum>\n";
+      }
+      if ($buddy->uid) {
+        $output .= '      <rdfs:seeAlso rdf:resource="'. url('foaf/'.$buddy->uid) . '" />' ."\n";
+      }
+      $output .= "    </foaf:Person>\n";
+      $output .= "  </foaf:knows>\n";
+    }
+  }
+  
+  $output .= "</foaf:Person>\n";
+  $output .= "</rdf:RDF>\n";
+
+  header ('Content-Type: application/rdf+xml');
+  header ('Content-Disposition: attachment; filename="'.$account->name.'.rdf"');
+  print $output;
+}
+
+function foaf_import($account) {
+  if (!$account->foaf_url) {
+    return;
+  }
+  
+  $fp = fopen($account->foaf_url,'r');
+  if (!$fp) {
+    // failed to open file (set allow_url_fopen = On)
+    return; 
+  }
+  while (!feof($fp)) {
+    $data .= fread($fp, 4192);
+  }
+  fclose($fp);
+
+  $foaf = _foaf_parse($data);
+
+  // import the image
+  if ($img = $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:IMG'][0]['ATTRIBUTES']['RDF:RESOURCE']) {
+    _foaf_import_image($img, $account);
+  }
+  else if ($depiction = $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:DEPICTION'][0]['ATTRIBUTES']['RDF:RESOURCE']) {
+    _foaf_import_image($depiction, $account);
+  }
+  
+  _foaf_profile_set($account->uid, variable_get('foaf_name',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:NAME'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_title',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:TITLE'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_firstName',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:FIRSTNAME'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_surname',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:SURNAME'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_Organization',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:ORGANIZATION'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_phone',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:PHONE'][0]['ATTRIBUTES']['RDF:RESOURCE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_aimChatID',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:AIMCHATID'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_icqChatID',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:ICQCHATID'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_msnChatID',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:MSNCHATID'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_yahooChatID',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:YAHOOCHATID'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_jabberID',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:JABBERID'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_workplaceHomepage',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['FOAF:WORKPLACEHOMEPAGE'][0]['ATTRIBUTES']['RDF:RESOURCE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_street',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['VCARD:ADR'][0]['VCARD:STREET'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_locality',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['VCARD:ADR'][0]['VCARD:LOCALITY'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_region',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['VCARD:ADR'][0]['VCARD:REGION'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_pcode',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['VCARD:ADR'][0]['VCARD:PCODE'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_country',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['VCARD:ADR'][0]['VCARD:COUNTRY'][0]['VALUE']);
+  _foaf_profile_set($account->uid, variable_get('foaf_keywords',0), $foaf['RDF:RDF'][0]['FOAF:PERSON'][0]['BIO:KEYWORDS'][0]['VALUE']);
+
+  watchdog('user', t('FOAF: imported data from %url', array('%url' => $account->foaf_url)));
+}
+
+function foaf_login($user) {
+  if (!$user->foaf_url) {
+    if ($server = strrchr($user->name, '@')) {
+      $name = substr($user->name, 0, strlen($user->name) - strlen($server));
+    $server = substr($server, 1);
+    }
+    else {
+      return;
+    }
+    
+    // send an xmlrpc message to the server to get a full foaf url
+    $message = new xmlrpcmsg('foaf.getUrl', array(new xmlrpcval($name, 'string')));
+    $client = new xmlrpc_client('/xmlrpc.php', $server, 80);
+    $result = $client->send($message, 5);
+    if ($result && !$result->faultCode()) {
+      $value = $result->value();
+      $user->foaf_url = $value->scalarval();
+    }
+  }
+
+  foaf_import($user);
+}
+
+/**
+ * XML-RPC function to return the FOAF url for a user
+ */
+function foaf_get_url($params) {
+  $param = $params->getparam(0);
+  $username = $param->scalarval();
+
+  if ($user = user_load(array('name' => $username, 'status' => 1))) {
+    return new xmlrpcresp(new xmlrpcval(url('foaf/'.$user->uid, null,null, true)));
+  }
+}
+                                 
+function foaf_user_form($user) {
+  $data = form_textfield(t('URL for your FOAF file'), 'foaf_url', $user->foaf_url, 64, 255);
+  $data.= form_checkbox(t('Allow FOAF export'), 'foaf_export', 1, _foaf_allow_export($user));
+      
+  $items = array();
+  $items[] = array('title' => t("FOAF Settings"),
+                   'data' => $data,
+                   'weight' => 0);
+
+  return $items;
+}
+
+/**
+ * Helper functions
+ */
+function _foaf_profile_fields() {
+  $output =  array('' => t('Select an option'));
+
+  $result = db_query("SELECT fid, title FROM {profile_fields} WHERE visibility=%d OR visibility=%d", PROFILE_PUBLIC, PROFILE_PUBLIC_LISTINGS);
+  while ($row = db_fetch_object($result)) {
+    $output[$row->fid] = $row->title;
+  }
+  return $output;
+}
+
+function _foaf_profile_get($uid, $fid) {
+  return db_result(db_query("SELECT value FROM {profile_values} WHERE fid=%d AND uid=%d", $fid, $uid));
+}
+
+function _foaf_profile_set($uid, $fid, $value) {
+  if (!$uid || !$fid || !$value) {
+    return;
+  }
+  db_query("DELETE FROM {profile_values} WHERE fid = %d AND uid = %d", $fid, $uid);
+  db_query("INSERT INTO {profile_values} (fid, uid, value) VALUES (%d, %d, '%s')", $fid, $uid, $value);
+}
+
+/**
+ * note: this is a bit of a hack, since user_validate_picture expects the
+ * picture to have been http uploaded
+ *
+ * TODO - refactor user_validate_picture
+ */
+function _foaf_import_image($url, $account) {
+  $fp = fopen($url,'r');
+  if (!$fp) {
+    // failed to open file (set allow_url_fopen = On)
+    return; 
+  }
+  while (!feof($fp)) {
+    $data .= fread($fp, 4192);
+  }
+  fclose($fp);
+
+  $tempdest = variable_get('user_picture_path', 'pictures') .'/tmp-picture-'. $account->uid;
+  $tempfile = file_save_data($data, $tempdest, 1);
+
+  // validate the file
+  $size = @getimagesize($tempfile);
+  list($maxwidth, $maxheight) = explode('x', variable_get('user_picture_dimensions', '85x85'));
+
+  if ((!in_array($size[2], array(1, 2, 3)))) {
+    file_delete($tempfile);
+  }
+  else if ($file->size > (variable_get('user_picture_file_size', '30') * 1000)) {
+    file_delete($tempfile);
+  }
+  else if ($size[0] > $maxwidth || $size[1] > $maxheight) {
+    file_delete($tempfile);
+  }
+  else {
+    switch($size[2]) {
+      case 1:
+        $ext = '.gif';
+        break;
+      case 2:
+        $ext = '.jpg';
+        break;
+      case 3:
+        $ext = '.png';
+        break;
+    }
+
+    $picture = variable_get('user_picture_path', 'pictures') .'/picture-'. $account->uid . $ext;
+    $result = file_move($tempfile, $picture, FILE_EXISTS_REPLACE);
+    if ($result) {
+      db_query("UPDATE {users} SET picture='%s' WHERE uid=%d", $tempfile, $account->uid);
+    }
+  }
+}
+
+/**
+ * THE FOLLOWING CODE COMES FROM Joel DeGan's Parser:
+ *
+ * http://peoplesdns.com/parse/parse.phps
+ */
+function _foaf_parse($data) {
+  $parser = xml_parser_create('ISO-8859-1');
+  xml_parser_set_option($parser, XML_OPTION_SKIP_WHITE, 1);
+  xml_parse_into_struct($parser, $data, $values, $index);
+  xml_parser_free($parser);
+
+  $i = -1;
+  return _foaf_getchildren($values, $i);
+}
+
+// internal function: build a node of the tree
+function _foaf_buildtag($thisvals, $vals, &$i, $type) {
+  
+  if (isset($thisvals['attributes']))
+    $tag['ATTRIBUTES'] = $thisvals['attributes'];
+  
+  // complete tag, just return it for storage in array
+  if ($type === 'complete')
+    $tag['VALUE'] = $thisvals['value'];
+  
+  // open tag, recurse
+  else
+    $tag = array_merge($tag, _foaf_getchildren($vals, $i));
+  
+  return $tag;
+}
+
+// internal function: build an nested array representing children
+function _foaf_getchildren($vals, &$i) {
+  $children = array();     // Contains node data
+  
+  // Node has CDATA before it's children
+  if ($i > -1 && isset($vals[$i]['value']))
+    $children['VALUE'] = $vals[$i]['value'];
+  
+  // Loop through children, until hit close tag or run out of tags
+  while (++$i < count($vals)) {
+    
+    $type = $vals[$i]['type'];
+    
+    // 'cdata':    Node has CDATA after one of it's children
+    //         (Add to cdata found before in this case)
+    if ($type === 'cdata')
+      $children['VALUE'] .= $vals[$i]['value'];
+    
+    // 'complete':    At end of current branch
+    // 'open':    Node has children, recurse
+    elseif ($type === 'complete' || $type === 'open') {
+      $tag = _foaf_buildtag($vals[$i], $vals, $i, $type);
+      if ($index_numeric) {
+        $tag['TAG'] = $vals[$i]['tag'];
+        $children[] = $tag;
+      } else
+        $children[$vals[$i]['tag']][] = $tag;
+            }
+    
+    // 'close:    End of node, return collected data
+    //        Do not increment $i or nodes disappear!
+    elseif ($type === 'close')
+        break;
+  }
+  if ($collapse_dups)
+    foreach($children as $key => $value)
+        if (is_array($value) && (count($value) == 1))
+          $children[$key] = $value[0];
+  return $children;
+}
+
+function _foaf_allow_export($account) {
+  if (isset($account->foaf_export)) {
+    return $account->foaf_export;
+  }
+  else {
+    return variable_get('foaf_export_default', 0);
+  }
+}
+?>

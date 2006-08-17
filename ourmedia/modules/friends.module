@@ -1,0 +1,631 @@
+<?php
+
+/**
+ * Implementation of hook_paypal_transaction()
+ *
+ * @param $fields  An array of information from PayPal IPN
+ */
+function friends_paypal_transaction($fields) {
+$name = $fields['first_name'] . " " . $fields['last_name'];
+$email = $fields['payer_email'];
+$amount = $fields['payment_gross'];
+$note = mysql_escape_string($fields['memo']);
+$link = mysql_escape_string($fields['custom']);
+$time = time();
+db_query("INSERT INTO friends_contributors (id, amount, date, name, link, title, note, email) VALUES ('','$amount',$time,'$name','$link','$link','$note','$email');");
+}
+
+/**
+ * Implementation of hook_perm().
+ */
+function friends_perm() {
+  return array('administer contributors');
+}
+
+
+function _friends_mail_text($messageid, $variables = array()) {
+
+    switch ($messageid) {
+      case 'pass_subject':
+        return t('PayPal Email Confirmation for %username at %site', $variables);
+      case 'pass_body':
+        return t("%username,\n\nHere is your PayPal email confirmation for %site. You may now confirm your PayPal account by clicking the confirm link %confirm_uri\n\n", $variables);
+    }
+}
+
+/**
+ * Implementation of hook_user().
+ */
+function friends_user($op, &$edit, &$user, $category = NULL) {
+global $base_url;
+
+  switch ($op) {
+    case 'form':
+      if ($category == 'account') {
+		$formfields = form_textfield('Your PayPal E-Mail Address', 'friends_paypal', $user->friends_paypal, 64, 64, t('Your paypal email address is used to associate donations to your account.'));
+        $output[] = array('title' => 'PayPal','data'  => $formfields);
+      }
+      break;
+	case 'update':
+
+		if ($edit['friends_paypal'] == "")
+		{
+			$user->friends_confirm=null;
+        }
+
+		if ($edit['friends_paypal'] != $user->friends_paypal || $edit['friends_paypal'] !="" && !$user->friends_confirm)
+		{
+			$user->friends_confirm=0;
+		}
+
+		if ($user->friends_confirm == 0 && $user->friends_confirm != 1 && $edit['friends_paypal'])
+		{
+
+    		$from = variable_get('site_mail', ini_get('sendmail_from'));
+    		$pass = user_password();
+
+    		// Save custom data:
+			user_save($user, array('friends_confirm' => $pass));
+			$user->friends_confirm = $pass;
+			$user->friends_paypal = $edit['friends_paypal'];
+
+    		// Mail new password:
+    		$variables = array('%username' => $user->name, '%site' => variable_get('site_name', 'drupal'), '%password' => $pass, '%uri' => $base_url, '%uri_brief' => substr($base_url, strlen('http://')), '%mailto' => $user->friends_paypal, '%date' => format_date(time()), '%confirm_uri' => url('friends/confirm/'. $user->uid .'/' .$user->friends_confirm, NULL, NULL, TRUE));
+    		$subject = _friends_mail_text('pass_subject', $variables);
+    		$body = _friends_mail_text('pass_body', $variables);
+    		$headers = "From: $from\nReply-to: $from\nX-Mailer: Drupal\nReturn-path: $from\nErrors-to: $from";
+    		$mail_success = user_mail($user->friends_paypal, $subject, $body, $headers);
+
+    		if ($mail_success) {
+      			watchdog('user', t('PayPal confirmation mailed to %name at %email.', array('%name' => theme('placeholder', $user->name), '%email' => theme('placeholder', $user->mail))));
+      			drupal_set_message(t("Instructions to confirm your PayPal E-mail address have been sent to your inbox."));
+    		}
+    		else {
+      			watchdog('user', t('Error mailing PayPal confirmation to %name at %email.', array('%name' => theme('placeholder', $user->name), '%email' => theme('placeholder', $user->mail))), WATCHDOG_ERROR);
+      			drupal_set_message(t('Unable to send mail. Please contact the site admin.'));
+    		}
+		}
+	  break;
+	 case 'validate':
+
+  			if ($edit['friends_paypal'] && !valid_email_address($edit['friends_paypal'])) {
+    			form_set_error('friends_paypal', t('The PayPal E-mail address you entered is not valid'));
+			}
+	 break;
+  }
+return $output;
+}
+
+
+/**
+ * Implementation of hook_settings().
+ */
+function friends_settings() {
+$output = form_textfield(t('PayPal E-Mail'), 'friends_email',
+    variable_get('friends_email', 'info@ourmedia.org'), 50, 255,
+    t('PayPal E-mail Address to use'));
+$output .= form_textfield(t('Item Name'), 'friends_itemname',
+    variable_get('friends_itemname', 'Ourmedia One Time Contribution'), 50, 255,
+    t('PayPal Item Name to use'));
+$output .= form_textfield(t('Item Number'), 'friends_itemnumber',
+    variable_get('friends_itemnumber', '1'), 50, 255,
+    t('PayPal Item Number to use')); 
+$output .= form_textfield(t('Logo Image URL'), 'friends_logo',
+    variable_get('friends_logo', 'http://www.ourmedia.org/sites/ourmedia.org/files/OM-152.png'), 50, 255,
+    t('PayPal Logo to use')); 
+$output .= form_textfield(t('Button Image URL'), 'friends_button',
+    variable_get('friends_button', 'https://www.paypal.com/en_US/i/btn/x-click-but21.gif'), 50, 255,
+    t('PayPal Button Image to use'));
+$output .= form_textfield(t('Page Return URL'), 'friends_return',
+    variable_get('friends_return', 'http://www.ourmedia.org/friends'), 50, 255,
+    t('PayPal Return URL to use'));
+$output .= form_textfield(t('Paypal IPN URL'), 'friends_ipn',
+    variable_get('friends_ipn', 'http://www.ourmedia.org/paypal/ipn'), 50, 255,
+    t('PayPal IPN URL to use'));
+$output .= form_textarea(t('Friends and Supporters Page HTML'), 'friends_html1', variable_get('friends_html1', ''), 64, 10,
+    t('Text at the top of the Friends and Supporters page.'));
+$output .= form_textarea(t('Contribute Page HTML'), 'friends_html2', variable_get('friends_html2', ''), 64, 10,
+    t('Text at the top of the Contribute page.'));
+$output .= form_textarea(t('Contribute Block HTML'), 'friends_html3', variable_get('friends_html3', ''), 64, 10,
+    t('Text shown in the Contribute Block'));
+return $output;
+}
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_confirm($uid=NULL,$code=NULL) {
+
+  	if (!$uid || !$code) {
+
+    return drupal_not_found();
+
+  	} else {
+
+		if (is_numeric($uid))
+		{
+			$account = user_load(array('uid' => $uid));
+
+				if ($account->friends_confirm == 1)
+				{
+					drupal_set_message("PayPal Account already confirmed.");
+				}
+				else if ($account->friends_confirm == $code)
+				{
+					user_save($account, array('friends_confirm' => 1));
+					drupal_set_message("PayPal E-Mail address has been confirmed");
+
+				} else {
+					drupal_set_message("PayPal Confirmation Code invalid");
+				}
+
+			drupal_goto('user/'.$uid);
+
+		} else {
+
+    		return drupal_not_found();
+		
+		}
+
+	}
+
+}
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_admin() {
+
+  $header = array(array('data' => t('Name'), 'field' => 'name'), array('data' => t('Date'), 'field' => 'date'),array('data' => t('Amount'), 'field' => 'amount'), array('data' =>t('Link'), 'field' => 'link'), array('data' => t('Operations'), 'colspan' => 2));
+  $result = db_query("SELECT id, amount, date, name, link FROM {friends_contributors}". tablesort_sql($header));
+  $access_types = array('user' => t('username'), 'mail' => t('e-mail'));
+  $rows = array();
+  while ($friend = db_fetch_object($result)) {
+    $rows[] = array($friend->name,format_date($friend->date, 'small'),$friend->amount, $friend->link, l(t('edit'), 'admin/friends/edit/'. $friend->id), l(t('delete'), 'admin/friends/delete/'. $friend->id));
+  }
+  if (count($rows) == 0) {
+    $rows[] = array(array('data' => '<em>'. t('There are currently no contributors.') .'</em>', 'colspan' => 5));
+  }
+  $output .= theme('table', $header, $rows);
+
+  print theme('page', $output);
+}
+
+function _friends_paypal_button()
+{
+
+$paypal_post = variable_get('paypal_post','https://www.paypal.com/cgi-bin/webscr');
+$paypal_email = variable_get('friends_email','info@ourmedia.org');
+$paypal_logo = variable_get('friends_logo','http://www.ourmedia.org/sites/ourmedia.org/files/OM-152.png');
+$paypal_return = variable_get('friends_return','http://www.ourmedia.org/friends');
+$paypal_ipn = variable_get('friends_ipn','http://www.ourmedia.org/paypal/ipn');
+$paypal_button = variable_get('friends_button','https://www.paypal.com/en_US/i/btn/x-click-but21.gif');
+$paypal_itemname = variable_get('friends_itemname','Ourmedia One Time Contribution');
+$paypal_itemnumber = variable_get('friends_itemnumber','1');
+
+$form.="<input type=\"hidden\" name=\"cmd\" value=\"_xclick\">
+<input type=\"hidden\" name=\"business\" value=\"$paypal_email\">
+<input type=\"hidden\" name=\"item_name\" value=\"$paypal_itemname\">
+<input type=\"hidden\" name=\"item_number\" value=\"$paypal_itemnumber\">
+<input type=\"hidden\" name=\"cn\" value=\"Friendly Comments\">
+<input type=\"hidden\" name=\"currency_code\" value=\"USD\">
+<input type=\"hidden\" name=\"image_url\" value=\"$paypal_logo\">
+<input type=\"hidden\" name=\"return\" value=\"$paypal_return\">
+<input type=\"hidden\" name=\"notify_url\" value=\"$paypal_ipn\">
+";
+$form.="<input type=\"image\" src=\"$paypal_button\" border=\"0\" name=\"submit\" alt=\"Make payments with PayPal - it's fast, free and secure!\">";  
+		
+$button = form($form,"POST","$paypal_post");  
+		
+return $button; 
+
+}
+
+function _friends_parse($html)
+{
+
+$paypal_button = _friends_paypal_button();
+$newhtml = str_replace("%paypal_button%", $paypal_button, $html);
+
+return $newhtml;
+}
+
+function _friends_admin_contributor_form($edit) {
+$output = form_textfield(t('Contributor Name'), 'name',
+    $edit['name'], 50, 255,
+    t('Contributors name'));
+$output .= form_textfield(t('Contributor Email'), 'email',
+    $edit['email'], 50, 255,
+    t('Contributors PayPal Email Address'));
+$output .= form_textfield(t('Contributor Amount'), 'amount',
+    $edit['amount'], 50, 255,
+    t('Amount contributed')); 
+$output .= form_textfield(t('Contributor Link Title'), 'title',
+    $edit['title'], 50, 255,
+    t('Contributors blog or website title'));
+$output .= form_textfield(t('Contributor Link URL'), 'link',
+    $edit['link'], 50, 255,
+    t('Contributors blog or website URL'));
+$output .= form_textarea(t('Contributors Note'), 'note', $edit['note'], 64, 10,
+    t('Message from the contributor'));
+  return $output;
+}
+
+
+function _friends_user_contributor_form($edit) {
+$output = form_textfield(t('Contributor Name'), 'name',
+    $edit['name'], 50, 255,
+    t('Contributors name'));
+$output .= form_textfield(t('Contributor Link Title'), 'title',
+    $edit['title'], 50, 255,
+    t('Contributors blog or website title'));
+$output .= form_textfield(t('Contributor Link URL'), 'link',
+    $edit['link'], 50, 255,
+    t('Contributors blog or website URL'));
+$output .= form_textarea(t('Contributors Note'), 'note', $edit['note'], 64, 10,
+    t('Message from the contributor'));
+  return $output;
+}
+
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_admin_add() {
+
+  if ($edit = $_POST['edit']) {
+	  $time = time();
+      $cid = db_next_id('{friends_contributors}_id');
+      db_query("INSERT INTO {friends_contributors} (id, amount,date, name,link,title,note,email) VALUES (%d, '%s', %d, '%s','%s','%s','%s','%s')", $cid, $edit['amount'], $time, $edit['name'],$edit['link'],$edit['title'],$edit['note'],$edit['email']);
+      drupal_set_message(t('The contributor has been added.'));
+      drupal_goto('admin/friends');
+  }
+
+  $form = _friends_admin_contributor_form($edit);
+  $form .= form_submit(t('Add contributor'));
+
+  print theme('page', form($form, 'post', NULL, array('id' => 'friends-contributor')));
+
+}
+
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_edit_user($cid=NULL) {
+global $user;
+
+	if(!$user->uid) // check to see if the user is logged in
+	{
+		$output = "You are not authorized to view this page";
+	} 
+	else if (!$user->friends_paypal) {
+		$output = "To associate donations with your account, add your PayPal email address to your account.";
+	}
+	else if ($user->friends_confirm != 1){
+		$output = "Please confirm your PayPal email address by clicking the link in the confirmation email";
+	}
+  	else if ($edit = $_POST['edit']) {
+		if ($edit['email'] != $user->friends_paypal)
+		{
+		$output = "You are not authorized to view this page";
+		} else{ 
+	  		$note = mysql_escape_string(htmlspecialchars($edit['note']));
+	  		$link = mysql_escape_string(htmlspecialchars($edit['link']));
+	  		$name = mysql_escape_string(htmlspecialchars($edit['name']));
+	  		$title = mysql_escape_string(htmlspecialchars($edit['title']));
+      		db_query("UPDATE {friends_contributors} SET name = '%s', link = '%s', title='%s',note='%s' WHERE id = %d",$name,$link,$title,$note, $cid);
+      		drupal_set_message(t('Your donation information has been updated'));
+      		drupal_goto('friends/edit');
+		}
+  	}
+	else if (is_numeric($cid)){
+    $edit = db_fetch_array(db_query('SELECT id, name, email, link, title, note FROM {friends_contributors} WHERE id = %d', $cid));
+		if ($edit['email'] != $user->friends_paypal)
+		{
+		$output = "You are not authorized to view this page";
+		} else{ 
+  			$form = _friends_user_contributor_form($edit);
+  			$form .= form_submit(t('Save contributor'));
+  			$output = form($form, 'post', NULL, array('id' => 'friends-contributor'));
+		}
+	}
+	else {
+  		$paypal_mail = $user->friends_paypal;
+  		$header = array(array('data' => t('Name'), 'field' => 'name'), array('data' => t('Date'), 'field' => 'date'),array('data' => t('Amount'), 'field' => 'amount'), array('data' =>t('Link'), 'field' => 'link'), array('data' => t('Operations'), 'colspan' => 2));
+  		$result = db_query("SELECT id, amount, date, name, link FROM {friends_contributors} WHERE email='$paypal_mail'". tablesort_sql($header));
+
+  		$rows = array();
+  		while ($friend = db_fetch_object($result)) {
+    		$rows[] = array($friend->name,format_date($friend->date, 'small'),$friend->amount, $friend->link, l(t('edit'), 'friends/edit/'. $friend->id));
+  		}
+  		if (count($rows) == 0) {
+    		$rows[] = array(array('data' => '<em>'. t('There are currently no contributors.') .'</em>', 'colspan' => 5));
+  		}
+  		$output .= theme('table', $header, $rows);
+	}
+
+print theme('page', $output);
+}
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_admin_edit($cid) {
+  if ($edit = $_POST['edit']) {
+      db_query("UPDATE {friends_contributors} SET name = '%s', amount = '%s', link = '%s', email='%s', title='%s',note='%s' WHERE id = %d", $edit['name'], $edit['amount'], $edit['link'],$edit['email'],$edit['title'],$edit['note'], $cid);
+      drupal_set_message(t('The contributor information has been updated.'));
+      drupal_goto('admin/friends');
+  }
+  else {
+    $edit = db_fetch_array(db_query('SELECT id, name, link, amount, title, note, email FROM {friends_contributors} WHERE id = %d', $cid));
+  }
+  $form = _friends_admin_contributor_form($edit);
+  $form .= form_submit(t('Save contributor'));
+  print theme('page', form($form, 'post', NULL, array('id' => 'friends-contributor')));
+}
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_admin_delete($cid) {
+  if ($_POST['edit']['confirm']) {
+    db_query('DELETE FROM {friends_contributors} WHERE id = %d', $cid);
+    drupal_set_message(t('The contributor has been deleted.'));
+    drupal_goto('admin/friends');
+  }
+  else {
+
+    $edit = db_fetch_object(db_query('SELECT name FROM {friends_contributors} WHERE id = %d', $cid));
+
+    $output = theme('confirm',
+                    t('Are you sure you want to delete %name?', array('%name' => $edit->name)),
+                    'admin/friends',
+                    t('This action cannot be undone.'),
+                    t('Delete'),
+                    t('Cancel'),
+                    $extra);
+    print theme('page', $output);
+  }
+}
+
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_contribute() {
+
+$friends_html2 = variable_get('friends_html2','');
+
+$output = _friends_parse($friends_html2);
+
+print theme('page', $output);
+}
+
+
+/**
+
+ * Implementation of hook_block().
+
+ */
+
+function friends_block($op = 'list', $delta = 0) {
+
+  if ($op == 'list') {
+    $blocks[0]['info'] = t('Contribute');
+    return $blocks;
+  }
+  else if ($op == 'view') {
+
+    switch ($delta) {
+      case 0:
+        $block['subject'] = t('FRIENDS & SUPPORTERS');
+        $block['content'] = friends_contents(1);
+        break;
+    }
+    return $block;
+  }
+}
+
+
+function friends_contents($which_block) {
+  if ($which_block == 1) {
+
+		$friends_html3 = variable_get('friends_html3','');
+
+		$block = _friends_parse($friends_html3);
+ 
+		return $block; 
+  }
+
+} 
+
+
+/**
+
+ * Menu callback; displays a Drupal page containing recent blog entries.
+
+ */
+
+function friends_page() {
+
+$output = _friends_parse(variable_get('friends_html1',''));
+
+$header = array(
+    array('data' => t('Name'), 'field' => 'name'),
+    array('data' => t('Date'), 'field' => 'date'),
+    array('data' => t('Amount'), 'field' => 'amount','sort' => 'desc'),
+    array('data' => t('Link'), 'field' => 'link'),
+    array('data' => t('Note'), 'field' => 'note')
+    );
+
+$sql = "SELECT link, name, amount, date, title, note FROM {friends_contributors}";
+$sql .= tablesort_sql($header);
+
+$result = db_query($sql);
+
+    if (db_num_rows($result) > 0) {
+       
+        while ($objfriend = db_fetch_object($result))
+        {
+            $name = $objfriend->name;
+            $date = format_date($objfriend->date, 'small');
+            $amount = "$" . $objfriend->amount;
+            $link = $objfriend->link;
+            $title = $objfriend->title;
+            $note = $objfriend->note;
+            $rows[] = array($name,$date,$amount,l($title,$link),$note); 
+        }
+
+    } else {
+    $rows[] = array(array('data' => '<em>'. t('There are currently no contributors.') .'</em>', 'colspan' => 5));
+    }
+
+    $output .= theme('table', $header, $rows);
+
+    print theme('page', $output);
+}
+
+
+/**
+
+ * Implementation of hook_help().
+
+ */
+
+function friends_help($section) {
+
+  switch ($section) {
+
+    case 'admin/modules#description':
+
+      return t('Allows users to contribute and receive recognition');
+
+  }
+
+}
+
+/**
+
+ * Implementation of hook_menu().
+
+ */
+function friends_menu($may_cache) {
+
+  $items = array();
+  $access = user_access('administer contributors');
+
+if ($may_cache) {
+
+
+// Main Item
+    $items[] = array('path' => 'friends', 'title' => t('Friends and Supporters'),
+      'callback' => 'friends_page', 'access' => TRUE);
+
+// Main Tabs
+   $items[] = array('path' => 'friends/list', 'title' => t('list'),
+
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+
+	  'weight' => -10);
+
+
+   $items[] = array('path' => 'friends/contribute', 'title' => t('contribute'),
+
+      'callback' => 'friends_contribute',
+
+      'access' => user_access('access content'),
+
+      'type' => MENU_LOCAL_TASK,
+
+	  'weight' => 10);
+
+
+// Main Admin Menu Item
+   $items[] = array('path' => 'admin/friends', 'title' => t('friends'),
+
+      'callback' => 'friends_admin',
+
+      'access' => $access);
+
+// Top Level Tabs
+   $items[] = array('path' => 'admin/friends/list', 'title' => t('list'),
+
+      'type' => MENU_DEFAULT_LOCAL_TASK,
+
+	  'weight' => -10);
+
+   $items[] = array('path' => 'admin/friends/add', 'title' => t('add'),
+
+      'callback' => 'friends_admin_add',
+
+      'access' => $access,
+
+      'type' => MENU_LOCAL_TASK,
+
+	  'weight' => 10);
+
+// Callbacks
+
+
+   $items[] = array('path' => 'friends/confirm', 'title' => '',
+
+      'callback' => 'friends_confirm',
+
+      'access' => true,
+
+      'type' => MENU_CALLBACK);
+
+   $items[] = array('path' => 'friends/edit', 'title' => 'Edit Contributions',
+
+      'callback' => 'friends_edit_user',
+
+      'access' => true,
+
+      'type' => MENU_CALLBACK);
+
+   $items[] = array('path' => 'admin/friends/delete', 'title' => t('Delete Contributor'),
+
+      'callback' => 'friends_admin_delete',
+
+      'access' => $access,
+
+      'type' => MENU_CALLBACK);
+
+   $items[] = array('path' => 'admin/friends/edit', 'title' => t('Edit Contributor'),
+
+      'callback' => 'friends_admin_edit',
+
+      'access' => $access,
+
+      'type' => MENU_CALLBACK);
+
+}
+
+
+  return $items;
+
+}
+
+?>

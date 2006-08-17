@@ -1,0 +1,221 @@
+<?php
+// $Id: taxonomy_browser.module,v 1.14.2.2 2005/04/22 14:58:17 weitzman Exp $
+// Original by Moshe Weitzman (weitzmna@tejasa.com)
+
+/**
+ * @file
+ * Enables users to contruct their own view of content from terms accross multiple vocabularies.
+ */
+
+/********************************************************************
+ * Drupal Hooks :: General Overview
+ ********************************************************************/
+
+/**
+ * Implementation of hook_menu().
+ */
+function taxonomy_browser_menu($may_cache) {
+  $items = array();
+
+  if ($may_cache) {
+    $items[] = array('path' => 'taxonomy_browser', 'title' => t('category browser'),
+      'access' => user_access('access content'),
+      'callback' => 'taxonomy_browser_page',
+      'weight' => 7,
+      'type' => MENU_NORMAL_ITEM);
+  }
+
+  return $items;
+}
+
+function taxonomy_browser_help($section = 'admin/help#taxonomy_browser') {
+  $output = '';
+  switch ($section) {
+    case 'admin/modules#description':
+      $output = t('An interface for viewing content grouped by arbitrary taxonomy terms.');
+      break;
+    case 'admin/settings/taxonomy_browser/guidelines':
+      $output = t('<p>You may select multiple items from each list by holding down the <code>Ctrl</code> (Mac: <code>command</code>) key while left-clicking each item.</p>');
+      break;
+  }
+
+  return $output;
+}
+
+/********************************************************************
+ * Drupal Hooks :: Core
+ ********************************************************************/
+
+/**
+ * Implementation of hook_settings().
+ */
+function taxonomy_browser_settings() {
+  $output = form_textarea(t('Guidelines'), 'taxonomy_browser_guidelines', variable_get('taxonomy_browser_guidelines', taxonomy_browser_help('admin/settings/taxonomy_browser/guidlines')), 60, 6, t('Instructions which should appear at top of the category browser main page'));
+  $vocabularies = taxonomy_get_vocabularies();
+  foreach ($vocabularies as $vocabulary) {
+    $select[$vocabulary->vid] = $vocabulary->name;
+  }
+  $output .= form_select(t('Included Vocabularies'), 'taxonomy_browser_vocabularies', variable_get('taxonomy_browser_vocabularies', array ()), $select, t('Select the vocabularies the user can select from on the category browser page'), '', 1);
+
+  return $output;
+}
+
+/********************************************************************
+ * Module Functions :: Public
+ ********************************************************************/
+
+/**
+ * The main controller for this module, invoked via the menu hook.
+ */
+function taxonomy_browser_page($nodetype = null) {
+  $output = '';
+
+  $edit = $_POST['edit'];
+  $op = $_POST['op'];
+
+  switch ($op) {
+    case t('Search'):
+      $output .= taxonomy_browser_nodes($edit, $nodetype);
+
+    default:
+      $output .= taxonomy_browser_overview($edit, $nodetype);
+  }
+
+  drupal_set_title(t('Advanced category search'));
+  print theme('page', $output);
+}
+
+/**
+ * The query building interface for node selected based on taxonomy terms.
+ */
+function taxonomy_browser_overview($edit = array(), $nodetype = null) {
+
+  $output = '';
+
+  if ($guidelines = variable_get('taxonomy_browser_guidelines', taxonomy_browser_help('admin/settings/taxonomy_browser/guidelines'))) {
+    $output .= $guidelines;
+  }
+
+  $node_filter[] = l(t('all'), 'taxonomy_browser');
+  foreach (node_list() as $type) {
+    $node_filter[] = l(node_invoke($type, 'node_name'), "taxonomy_browser/$type");
+  }
+  $output .= form_item(t('Restrict search by content type'), theme('links', $node_filter));
+
+  if ($vocabularies = variable_get('taxonomy_browser_vocabularies', array())) {
+    foreach ($vocabularies as $vid) {
+      if ($nodetype && db_result(db_query("SELECT COUNT(vid) FROM {vocabulary_node_types} WHERE type = '%s' AND vid = '%d'", $nodetype, $vid))) {
+        $v[] = $vid;
+      }
+    }
+    if ($v) {
+      $vocabularies = $v;
+    }
+    else if ($nodetype) {
+      drupal_set_message(t('%nodetype has no associated categories. Showing all categories instead.', array('%nodetype' => node_invoke($nodetype, 'node_name'))));
+    }
+
+
+    foreach ($vocabularies as $v) {
+      $form = taxonomy_form($v, $edit['taxonomy']);
+      $forms[] = array('data' => $form);
+    }
+
+    $ochecked = 1;
+    if ($edit['operator'] == 'and') {
+      $achecked = 1;
+      $ochecked = 0;
+    }
+
+    $group  = form_radio(t('Items containing <strong>all</strong> terms'), 'operator', 'and', $achecked);
+    $group .= form_radio(t('Items containing <strong>any</strong> terms'), 'operator', 'or', $ochecked);
+    $form = form_group(t('Scope'), $group);
+    $form .= form_submit(t('Search'));
+
+    if (count($forms) % 2) {
+      $forms[] = array('data' => '&nbsp;');
+    }
+    $rows = array_chunk($forms, 2);
+
+    $rows[] = array(array('data' => $form, 'colspan' => 2));
+    $output .= '<div id="taxonomy-browser">'. theme('table', null, $rows). '</div>';
+
+    return form($output);
+  }
+  else {
+    drupal_set_message(t('You must select the vocabularies to display from the <a href="%link">taxonomy browser settings page</a>.', array ('%link' => url('admin/settings/taxonomy_browser'))), 'error');
+  }
+}
+
+/********************************************************************
+ * Module Functions :: Private
+ ********************************************************************/
+
+/**
+ * Return search results of term query.
+ */
+function taxonomy_browser_nodes($edit, $nodetype = NULL) {
+  $taxonomy->operator = db_escape_string($edit['operator']);
+  $tids = array();
+  foreach ($edit['taxonomy'] as $tid) {
+    if ($tid) {
+      $tids[] = db_escape_string($tid);
+    }
+  }
+  $taxonomy->str_tids = ($taxonomy->operator == 'and') ? db_escape_string(implode(',', $tids)) : db_escape_string(implode('+', $tids));
+
+  if ($tids) {
+    if (taxonomy_browser_count_nodes($tids, $taxonomy->operator, 0, arg(1))) {
+      drupal_goto("taxonomy/term/$taxonomy->str_tids", $nodetype ? "type=$nodetype" : '');
+    }
+    else {
+      drupal_set_message(t('No posts match your criteria.'));
+    }
+  }
+  else {
+    drupal_set_message(t('You must select at least one category in your search.'), 'error');
+  }
+
+  return $output;
+}
+
+/**
+ * Private function to count the number of nodes found by the user's query.
+ */
+function taxonomy_browser_count_nodes($tids = array(), $operator = 'or', $depth = 0, $ndoetype = NULL) {
+  if (count($tids) > 0) {
+    // For each term ID, generate an array of descendant term IDs to the right depth.
+    $descendant_tids = array();
+    if ($depth === 'all') {
+      $depth = NULL;
+    }
+    foreach ($tids as $index => $tid) {
+      $term = taxonomy_get_term($tid);
+      $tree = taxonomy_get_tree($term->vid, $tid, -1, $depth);
+      $descendant_tids[] = array_merge(array($tid), array_map('_taxonomy_get_tid_from_term', $tree));
+    }
+
+    $type_where = $nodetype ? "n.type = '". db_escape_string($nodetype). "'" : 1;
+    if ($operator == 'or') {
+      $str_tids = implode(',', call_user_func_array('array_merge', $descendant_tids));
+
+      $sql_count = "SELECT COUNT(n.nid) FROM {node} n INNER JOIN {term_node} tn ON n.nid = tn.nid WHERE $type_where AND tn.tid IN ($str_tids) ORDER BY n.sticky DESC, n.title ASC";
+    }
+    else {
+      $joins = '';
+      $wheres = array();
+      $wheres[] = $type_where;
+      foreach ($descendant_tids as $index => $tids) {
+        $joins .= ' INNER JOIN {term_node} tn'. $index .' ON n.nid = tn'. $index .'.nid';
+        $wheres[] = 'tn'. $index .'.tid IN ('. implode(',', $tids) .')';
+      }
+      $sql_count = "SELECT COUNT(n.nid) FROM {node} n $joins WHERE ". implode(' AND ', $wheres);
+    }
+
+    return db_result(db_query(db_rewrite_sql($sql_count)));
+  }
+
+  return 0;
+}
+
+?>

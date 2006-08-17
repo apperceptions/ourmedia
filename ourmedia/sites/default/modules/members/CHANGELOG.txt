@@ -1,0 +1,50 @@
+04. November 2004
+-----------------
+- Change maintainers to James Walker <walkah@walkah.net>
+- Update for 4.5.0
+- Use new profile.module for extra fields
+
+13. November 2003
+-----------------
+- Updated to 4.3.0.
+- Users table() to create table.
+- Added permission 'access members list'.
+- Added database-prefix support.
+- Improved translation support.
+
+15. July 2003
+-------------
+members.module [Matt Westgate]
+- Eliminate the MySQL specific CONCAT() in order to work with all databases.
+
+10. June 2003
+-------------
+members.module [Matt Westgate]
+- updated module to work with latest CVS.
+- Displays user's homepage when profile module is enabled.
+
+02. May 2002
+------------
+members.module [Kjartan Mannes]
+- updated module to work with latest CVS.
+- updated INSTALL instructions.
+
+25. September 2001
+------------------
+members.module [Kjartan Mannes]
+- cleaned up the code and removed obsolete code.
+- removed check for "access content".
+
+members.module [Axel Kollmorgen]
+- added links to blog and recent comments.
+
+24. September 2001
+------------------
+members.module
+- updated to support new user system.
+- changed link on user name to use format_name().
+- other minor changes.
+
+11. July 2001
+-------------
+- initial release.

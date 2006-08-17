@@ -1,0 +1,12 @@
+$Id: TODO.txt,v 1.1 2004/10/16 12:33:52 gordon Exp $
+
+Critical
+--------
+
+Important
+---------
+
+Completed
+---------
+- Interface with fscache to allow images to be uploaded in put into nodes.
+- Allow users to edit paramters for plugins.

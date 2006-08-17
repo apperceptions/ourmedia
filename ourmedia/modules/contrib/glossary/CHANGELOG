@@ -1,0 +1,126 @@
+28 Dec 2004
+[Gabor Hojtsy - Goba]
+- Restore functionality of displaying *the* glossary, if there is only
+  one vocabulary is available, and link to only that one
+- Fix glossary linking so that it is path alias friendly
+
+02 Dec 2004
+[Frodo Looijaard]
+- Display in /glossary only those vocabularies that are in use as Glossaries
+  [issue 13480]
+
+19 Nov 2004
+[Frodo Looijaard]
+- Reimplement alphabar in glossary page [issue 13083; also fixes issues 12936, 
+  10645 and 9457].
+- Update of documentation
+- Fix default path to icon
+
+14 Nov 2004
+[Frodo Looijaard]
+- Fix typo in link in glossary page [issue 12915]
+- Fix (some) cache issues (regression in previous commits)
+
+13 Nov 2004
+[Frodo Looijaard]
+- Move global filter configuration to local input format configuration;
+  old page admin/filters/glossary is gone. [forum message 12827] 
+- page glossary: new page to select the taxonomy to display
+- page glossary/NUM: overview page for glossary with taxonomy number NUM 
+  (old glossary, when we only had one global glossary)
+- page glossary/term/NUM: select all pages which have term NUM 
+  (old glossary/NUM)
+- Update all generated links to reflect these page changes.
+- Fix breadcrumbs display
+- Use new semantics of taxonomy_select_node to fix problems when displaying
+  glossary/term/NUM pages (old gossary/NUM pages had this problem too)
+- Allow multiple vocabularies in a glossary filter.
+- Fix use of double quotes in description for title attributes [issue 10914]
+
+12 Nov 2004
+[Frodo Looijaard]
+- Remove superfluous (global) menu entries [issue 12679]
+
+07 Nov 2004
+[Frodo Looijaard]
+- Cleanup of CSS, mark all used formats with glossary types [issue 12630]
+- Update to properly set titel/class attributes in a tag [issue 12452]
+- Clearing cache was not working at all [issue 12551]
+
+06 Nov 2004
+[Frodo Looijaard]
+- Update to put CSS into separate file [issue 12543]
+
+11 Aug 2004
+[Alastair Maw - Al]
+- Update to work with new filter system.
+
+05 Aug 2004
+[Alastair Maw - Al]
+- Update to work with HEAD branch prior to 4.5.0 code freeze.
+  This includes the new _menu hook, etc.
+  Tidy up CSS a bit (no more hardcoded aligns).
+  XHTML compliance.
+
+04 Jan 2004
+[Gabor Hojtsy - Goba]
+- Optimize SQL by only running the synonym query once (not once
+  for every call and for every term)
+- Optimize filter by only computing the substring we need, and
+  use string functions instead of ereg()
+- Optimize memory usage with pass-by-reference
+
+03 Jan 2004
+[Gabor Hojtsy - Goba]
+- Major reorganization of filter code, using more sensible
+  variable names and structures
+- New optional feature: replace all occurances of terms
+  (not just the first)
+- Fix bug in SQL query, so every term is matched
+
+20 Dec 2003
+[Gabor Hojtsy - Goba]
+- Moved term query out to a cached function, so one SQL query will
+  be issued per page for the glossary
+- Link to the page of detailed description(s) directly in case of
+  some is available (otherwise add the traditional link pointing to the glossary)
+- Use our own taxonomy page implementation to add custom breadcrumbs
+
+15 Dec 2003
+[Gabor Hojtsy - Goba]
+- Fixed code to work with current CVS
+- Translation support for the whole module
+- Rework of generated HTML code to use definition lists and allow CSS styling
+- Added support for detailed descriptions of terms via attached nodes
+
+13 July 2002
+[Gerhard Killesreiter]
+Added option to match case insensitive.
+All synonyms are now matched if present.
+Longest matches are tried first.
+Updated INSTALL, online docs and CHANGELOG.
+
+11 July 2002
+[Gerhard Killesreiter]
+Matches inside a html-link will now be disregarded. You can specify if you want
+to match words, left/right substrings or any substring.
+
+14 June 2002
+glossary_filter() now matches against synonyms in addition to the term name.
+
+13 June 2002
+Added an Overview page and Page link in the main navigation. Displays related terms if any.
+Added term name at beginning of the hover description. These descriptions are now hyperlinked.
+Superscript indicator is now configurable (thanks Gerhard)
+
+11 June 2002
+Fixed more l() bugs in Help
+Added create glossary link in user menu
+Added _system() hook
+
+30 May 2002
+Fixed lm() bug
+
+8 May 2002
+First public release.
+
