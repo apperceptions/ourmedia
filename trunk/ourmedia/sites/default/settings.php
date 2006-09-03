@@ -1,10 +1,10 @@
 <?php
 
 //$db_url = 'mysql://root@localhost/ourmedia';
-$db_url = 'mysql://login:password@databasehost/databasename';
+$db_url = 'mysql://ourmedia_p:password@localhost/ourmedia_pdevelopment';
 $db_prefix = '';
 
-$base_url = 'http://www.ourmedia.org';
+#$base_url = 'http://www.ourmedia.org';
 
 /**
  * PHP settings:
