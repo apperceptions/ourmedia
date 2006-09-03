@@ -1,0 +1,1 @@
+This sql file will give you a basic database layout with the admin user 'admin' with password 'developer' suitable for use on a personal development installation.
